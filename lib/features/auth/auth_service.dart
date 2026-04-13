@@ -1,61 +1,82 @@
-import 'package:firebase_auth/firebase_auth.dart';
-import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
-class AuthService {
-  final FirebaseAuth _auth = FirebaseAuth.instance;
-  final FirebaseFirestore _db = FirebaseFirestore.instance;
+class AuthException implements Exception {
+  final String message;
+  final String? code;
+  const AuthException(this.message, {this.code});
 
-  Future<UserCredential> register({
-  required String email,
-  required String password,
-  required String name,
-  required String phone,
-}) async {
-  try {
-    print("STEP 1: Creating Auth user");
-
-    final userCredential = await _auth.createUserWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
-
-    final uid = userCredential.user!.uid;
-
-    print("STEP 2: Auth success UID = $uid");
-
-    print("STEP 3: Writing Firestore");
-
-    await _db.collection('users').doc(uid).set({
-      'uid': uid,
-      'email': email,
-      'fullName': name,
-      'phone': phone,
-      'role': 'customer',
-      'status': 'active',
-      'createdAt': FieldValue.serverTimestamp(),
-    });
-
-    print("STEP 4: Firestore success");
-
-    return userCredential;
-  } catch (e, stack) {
-    print("🔥 REGISTER FAILED: $e");
-    print(stack);
-    rethrow;
-  }
+  @override
+  String toString() => 'AuthException: $message';
 }
 
-  Future<UserCredential> login({
-    required String email,
-    required String password,
-  }) {
-    return _auth.signInWithEmailAndPassword(
-      email: email,
-      password: password,
-    );
+class AuthService {
+  final SupabaseClient _client;
+
+  // Dependency injection for testability
+  AuthService({SupabaseClient? client})
+      : _client = client ?? Supabase.instance.client;
+
+  // Reactive auth state for the UI layer to listen to
+  Stream<AuthState> get authStateChanges => _client.auth.onAuthStateChange;
+
+  User? get currentUser => _client.auth.currentUser;
+
+  Future<User> login(String email, String password) async {
+    try {
+      final response = await _client.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = response.user;
+      if (user == null) {
+        throw AuthException('Login returned no user', code: 'NO_USER');
+      }
+
+      return user;
+    } on AuthApiException catch (e) {
+      // Supabase error codes: 'invalid_credentials', 'email_not_confirmed', etc.
+      throw AuthException(e.message, code: e.statusCode.toString());
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException('Unexpected login error: $e', code: 'UNKNOWN');
+    }
+  }
+
+  Future<User> register(String email, String password) async {
+    try {
+      final response = await _client.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      final user = response.user;
+      if (user == null) {
+        throw AuthException('Registration returned no user', code: 'NO_USER');
+      }
+
+      // session is null when email confirmation is required
+      if (response.session == null) {
+        throw AuthException(
+          'Check your email to confirm your account',
+          code: 'EMAIL_CONFIRMATION_REQUIRED',
+        );
+      }
+
+      return user;
+    } on AuthApiException catch (e) {
+      throw AuthException(e.message, code: e.statusCode.toString());
+    } catch (e) {
+      if (e is AuthException) rethrow;
+      throw AuthException('Unexpected registration error: $e', code: 'UNKNOWN');
+    }
   }
 
   Future<void> logout() async {
-    await _auth.signOut();
+    try {
+      await _client.auth.signOut();
+    } on AuthApiException catch (e) {
+      throw AuthException(e.message, code: e.statusCode.toString());
+    }
   }
 }
