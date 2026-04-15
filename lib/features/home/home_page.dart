@@ -2,14 +2,56 @@ import 'package:flutter/material.dart';
 import '../../theme/app_theme.dart';
 import '../../widgets/shared_widgets.dart';
 import '../auth/auth_service.dart';
+import '../auth/carwash_service.dart';
 
-class HomePage extends StatelessWidget {
+class HomePage extends StatefulWidget {
   const HomePage({super.key});
 
   @override
-  Widget build(BuildContext context) {
-    final auth = AuthService();
+  State<HomePage> createState() => _HomePageState();
+}
 
+class _HomePageState extends State<HomePage> {
+  final auth = AuthService();
+  final carwashService = CarwashService();
+
+  List<Map<String, dynamic>> carwashes = [];
+  List<Map<String, dynamic>> bookings = [];
+  bool isLoading = true;
+  String userName = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _loadUserName();
+    fetchCarwashes();
+    fetchUpcomingBookings();
+  }
+
+  Future<void> _loadUserName() async {
+    final name = await auth.getUserName();
+    print('DEBUG name: $name');
+    if (mounted) setState(() => userName = name);
+  }
+
+  Future<void> fetchCarwashes() async {
+    final data = await carwashService.getCarwashes();
+    if (mounted) {
+      setState(() {
+        carwashes = data;
+        isLoading = false;
+      });
+    }
+  }
+
+  Future<void> fetchUpcomingBookings() async {
+    final data = await carwashService.getUpcomingBookings();
+    print('DEBUG bookings: $data');
+    if (mounted) setState(() => bookings = data);
+  }
+
+  @override
+  Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: SplashAppBar(
@@ -26,11 +68,11 @@ class HomePage extends StatelessWidget {
       body: ListView(
         children: [
           // Greeting
-          const Padding(
-            padding: EdgeInsets.fromLTRB(20, 18, 20, 0),
+          Padding(
+            padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
             child: Text(
-              'Hi Maria! 👋',
-              style: TextStyle(
+              'Hi $userName! 👋',
+              style: const TextStyle(
                 fontFamily: AppTextStyles.fontHeading,
                 fontSize: 20,
                 fontWeight: FontWeight.w800,
@@ -47,31 +89,43 @@ class HomePage extends StatelessWidget {
           ),
 
           // Upcoming booking card
-          _UpcomingCard(),
+          _UpcomingCard(
+            booking: bookings.isNotEmpty ? bookings.first : null,
+            onTap: () {},
+          ),
 
           // Promo banner
           _PromoBanner(),
 
-          // Section: My Car Washes
-          const SectionTitle('My Car Washes'),
-
-          // Car wash card 1
-          _CarwashCard(
-            name: 'AquaShine — Makati',
-            lastVisit: 'Last visit: 3 days ago',
-            badgeLabel: '🥇 Gold · 1,240 pts',
-            badgeBg: AppColors.amberLight,
-            badgeColor: AppColors.gold,
-          ),
-
-          // Car wash card 2
-          _CarwashCard(
-            name: 'SpeedyWash — Cebu',
-            lastVisit: 'Last visit: 2 weeks ago',
-            badgeLabel: '🥈 Silver · 620 pts',
-            badgeBg: const Color(0xFFF1F5F9),
-            badgeColor: const Color(0xFF64748B),
-          ),
+          // Section: Carwash Near Me
+          const SectionTitle('Carwash Near Me'),
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (carwashes.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'No car washes available.',
+                style: TextStyle(color: AppColors.muted, fontSize: 13),
+              ),
+            )
+          else
+            ...carwashes.map((cw) {
+              return _CarwashCard(
+                name: cw['name'] ?? 'Car Wash',
+                lastVisit: 'Available now',
+                badgeLabel: 'Open',
+                badgeBg: Colors.green.shade50,
+                badgeColor: Colors.green,
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/book',
+                    arguments: cw,
+                  );
+                },
+              );
+            }).toList(),
 
           // Find car wash button
           Padding(
@@ -87,21 +141,22 @@ class HomePage extends StatelessWidget {
   }
 }
 
+// ─── Upcoming Card ────────────────────────────────────────────────────────────
+
 class _UpcomingCard extends StatelessWidget {
+  final Map<String, dynamic>? booking;
+  final VoidCallback onTap;
+
+  const _UpcomingCard({required this.booking, required this.onTap});
+
   @override
   Widget build(BuildContext context) {
     return Container(
       margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: const Border(
-          left: BorderSide(color: AppColors.splash, width: 4),
-          right: BorderSide(color: AppColors.border),
-          top: BorderSide(color: AppColors.border),
-          bottom: BorderSide(color: AppColors.border),
-        ),
+        border: Border.all(color: AppColors.border), // ✅ uniform — no crash
         boxShadow: [
           BoxShadow(
             color: Colors.black.withOpacity(0.05),
@@ -110,81 +165,145 @@ class _UpcomingCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const Text(
-            '📅 UPCOMING BOOKING',
-            style: TextStyle(
-              fontFamily: AppTextStyles.fontHeading,
-              fontSize: 10,
-              fontWeight: FontWeight.w700,
-              color: AppColors.splash,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 6),
-          const Text(
-            'AquaShine — Makati',
-            style: TextStyle(
-              fontFamily: AppTextStyles.fontHeading,
-              fontSize: 14,
-              fontWeight: FontWeight.w700,
-              color: AppColors.dark,
-            ),
-          ),
-          const SizedBox(height: 2),
-          const Text(
-            'Saturday, Mar 29 at 9:00 AM · Basic Wash + Tire Shine',
-            style: TextStyle(fontSize: 12, color: AppColors.muted),
-          ),
-          const SizedBox(height: 8),
-          Row(
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(10),
+        child: IntrinsicHeight(
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              GestureDetector(
-                child: Container(
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                  decoration: BoxDecoration(
-                    color: AppColors.splash,
-                    borderRadius: BorderRadius.circular(6),
-                  ),
-                  child: const Text(
-                    'View Queue',
-                    style: TextStyle(
-                      fontFamily: AppTextStyles.fontHeading,
-                      fontSize: 11,
-                      fontWeight: FontWeight.w700,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
+              // ✅ Left accent bar as a separate widget — avoids non-uniform border crash
               Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                decoration: BoxDecoration(
-                  color: AppColors.splashLight,
-                  borderRadius: BorderRadius.circular(6),
-                ),
-                child: const Text(
-                  'Reschedule',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontHeading,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.splashDark,
-                  ),
+                width: 4,
+                color: AppColors.splash,
+              ),
+              // Content
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.all(14),
+                  child: booking == null ? _noBooking() : _hasBooking(),
                 ),
               ),
             ],
           ),
-        ],
+        ),
       ),
     );
   }
+
+  Widget _noBooking() {
+    return const Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          '📅 UPCOMING BOOKING',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontHeading,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.splash,
+            letterSpacing: 0.5,
+          ),
+        ),
+        SizedBox(height: 8),
+        Text(
+          'No upcoming bookings',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontHeading,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.dark,
+          ),
+        ),
+        SizedBox(height: 2),
+        Text(
+          'Book a car wash below to get started!',
+          style: TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
+      ],
+    );
+  }
+
+  Widget _hasBooking() {
+    final carwashName = booking!['carwashes']?['name'] ?? 'Car Wash';
+    final scheduledAt = booking!['scheduled_at'] ?? '';
+    final serviceType = booking!['service_type'] ?? '';
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '📅 UPCOMING BOOKING',
+          style: TextStyle(
+            fontFamily: AppTextStyles.fontHeading,
+            fontSize: 10,
+            fontWeight: FontWeight.w700,
+            color: AppColors.splash,
+            letterSpacing: 0.5,
+          ),
+        ),
+        const SizedBox(height: 6),
+        Text(
+          carwashName,
+          style: const TextStyle(
+            fontFamily: AppTextStyles.fontHeading,
+            fontSize: 14,
+            fontWeight: FontWeight.w700,
+            color: AppColors.dark,
+          ),
+        ),
+        const SizedBox(height: 2),
+        Text(
+          '$scheduledAt · $serviceType',
+          style: const TextStyle(fontSize: 12, color: AppColors.muted),
+        ),
+        const SizedBox(height: 8),
+        Row(
+          children: [
+            GestureDetector(
+              onTap: onTap,
+              child: Container(
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                decoration: BoxDecoration(
+                  color: AppColors.splash,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'View Queue',
+                  style: TextStyle(
+                    fontFamily: AppTextStyles.fontHeading,
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: Colors.white,
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+              decoration: BoxDecoration(
+                color: AppColors.splashLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              child: const Text(
+                'Reschedule',
+                style: TextStyle(
+                  fontFamily: AppTextStyles.fontHeading,
+                  fontSize: 11,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.splashDark,
+                ),
+              ),
+            ),
+          ],
+        ),
+      ],
+    );
+  }
 }
+
+// ─── Promo Banner ─────────────────────────────────────────────────────────────
 
 class _PromoBanner extends StatelessWidget {
   @override
@@ -209,9 +328,9 @@ class _PromoBanner extends StatelessWidget {
               ),
             ),
           ),
-          Column(
+          const Column(
             crossAxisAlignment: CrossAxisAlignment.start,
-            children: const [
+            children: [
               Text(
                 '🎉 Double Points Weekend!',
                 style: TextStyle(
@@ -224,10 +343,7 @@ class _PromoBanner extends StatelessWidget {
               SizedBox(height: 3),
               Text(
                 'Earn 2× points on all services this Saturday & Sunday',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: Colors.white70,
-                ),
+                style: TextStyle(fontSize: 11, color: Colors.white70),
               ),
             ],
           ),
@@ -237,12 +353,15 @@ class _PromoBanner extends StatelessWidget {
   }
 }
 
+// ─── Carwash Card ─────────────────────────────────────────────────────────────
+
 class _CarwashCard extends StatelessWidget {
   final String name;
   final String lastVisit;
   final String badgeLabel;
   final Color badgeBg;
   final Color badgeColor;
+  final VoidCallback onTap;
 
   const _CarwashCard({
     required this.name,
@@ -250,102 +369,106 @@ class _CarwashCard extends StatelessWidget {
     required this.badgeLabel,
     required this.badgeBg,
     required this.badgeColor,
+    required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 3,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Container(
-            width: 44,
-            height: 44,
-            decoration: BoxDecoration(
-              color: AppColors.splashLight,
-              borderRadius: BorderRadius.circular(6),
+    return GestureDetector(
+      onTap: onTap, // ✅ entire card is tappable
+      child: Container(
+        margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
+        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
+        decoration: BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.circular(10),
+          border: Border.all(color: AppColors.border),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withOpacity(0.05),
+              blurRadius: 3,
+              offset: const Offset(0, 1),
             ),
-            alignment: Alignment.center,
-            child: const Text('🏢', style: TextStyle(fontSize: 20)),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  name,
-                  style: const TextStyle(
-                    fontFamily: AppTextStyles.fontHeading,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.dark,
+          ],
+        ),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: AppColors.splashLight,
+                borderRadius: BorderRadius.circular(6),
+              ),
+              alignment: Alignment.center,
+              child: const Text('🏢', style: TextStyle(fontSize: 20)),
+            ),
+            const SizedBox(width: 12),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    name,
+                    style: const TextStyle(
+                      fontFamily: AppTextStyles.fontHeading,
+                      fontSize: 14,
+                      fontWeight: FontWeight.w700,
+                      color: AppColors.dark,
+                    ),
                   ),
-                ),
-                const SizedBox(height: 2),
-                Text(
-                  lastVisit,
-                  style:
-                      const TextStyle(fontSize: 11, color: AppColors.muted),
-                ),
-                const SizedBox(height: 6),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 8, vertical: 2),
-                      decoration: BoxDecoration(
-                        color: badgeBg,
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: Text(
-                        badgeLabel,
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontHeading,
-                          fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: badgeColor,
+                  const SizedBox(height: 2),
+                  Text(
+                    lastVisit,
+                    style: const TextStyle(
+                        fontSize: 11, color: AppColors.muted),
+                  ),
+                  const SizedBox(height: 6),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 8, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: badgeBg,
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Text(
+                          badgeLabel,
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontHeading,
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: badgeColor,
+                          ),
                         ),
                       ),
-                    ),
-                    const Spacer(),
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                          horizontal: 14, vertical: 5),
-                      decoration: BoxDecoration(
-                        color: AppColors.splash,
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: const Text(
-                        'Book',
-                        style: TextStyle(
-                          fontFamily: AppTextStyles.fontHeading,
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 14, vertical: 5),
+                        decoration: BoxDecoration(
+                          color: AppColors.splash,
+                          borderRadius: BorderRadius.circular(14),
+                        ),
+                        child: const Text(
+                          'Book',
+                          style: TextStyle(
+                            fontFamily: AppTextStyles.fontHeading,
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
-                ),
-              ],
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

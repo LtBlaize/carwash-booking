@@ -79,4 +79,25 @@ class AuthService {
       throw AuthException(e.message, code: e.statusCode.toString());
     }
   }
+  Future<String> getUserName() async {
+  final userId = _client.auth.currentUser?.id;
+  if (userId == null) return 'User';
+
+  try {
+    final response = await _client
+        .from('profiles')
+        .select('full_name')
+        .eq('id', userId)
+        .single();
+
+    final name = response['full_name'];
+    if (name != null && name.toString().isNotEmpty) {
+      return name.toString();
+    }
+
+    return _client.auth.currentUser?.userMetadata?['full_name'] ?? 'User';
+  } catch (_) {
+    return _client.auth.currentUser?.userMetadata?['full_name'] ?? 'User';
+  }
+}
 }
