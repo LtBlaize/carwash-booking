@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import 'auth_controller.dart';
-import 'validators.dart';
+import '../controllers/auth_controller.dart';
+import '../../../../core/utils/validators.dart';
 
 class LoginPage extends StatefulWidget {
   const LoginPage({super.key});

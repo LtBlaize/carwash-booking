@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
+import '../../../../core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import '../../widgets/shared_widgets.dart';
+import '../../../../shared/widgets/shared_widgets.dart';
 
 // ─── Data model ──────────────────────────────────────────────────────────────
 class VehicleBrand {
@@ -320,7 +320,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
     String? Function(T?)? validator,
   }) {
     return DropdownButtonFormField<T>(
-      value: value,
+      initialValue: value,
       decoration: _fieldDecoration(label, icon).copyWith(
         fillColor:
             enabled ? const Color(0xFFF5F7FA) : const Color(0xFFEDF0F5),

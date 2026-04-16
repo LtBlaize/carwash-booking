@@ -1,4 +1,4 @@
-import 'auth_service.dart';
+import '../../../../core/services/auth_service.dart';
 
 class AuthException implements Exception {
   final String message;

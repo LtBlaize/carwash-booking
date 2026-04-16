@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 
-import '../../theme/app_theme.dart';
-import '../../widgets/shared_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/shared_widgets.dart';
 
 
-import '../auth/auth_service.dart';
-import '../auth/carwash_service.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../auth/carwash_service.dart';
 
 Map<String, dynamic>? carwash;
 
@@ -129,7 +129,7 @@ class _BookPageState extends State<BookPage> {
                   );
                 },
               );
-            }).toList(),
+            }),
 
           // Find car wash button
           Padding(

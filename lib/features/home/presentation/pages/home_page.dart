@@ -1,8 +1,9 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/shared_widgets.dart';
-import '../auth/auth_service.dart';
-import '../auth/carwash_service.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/shared_widgets.dart';
+import '../../../../core/services/auth_service.dart';
+import '../../../auth/carwash_service.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -45,10 +46,34 @@ class _HomePageState extends State<HomePage> {
   }
 
   Future<void> fetchUpcomingBookings() async {
-    final data = await carwashService.getUpcomingBookings();
-    print('DEBUG bookings: $data');
-    if (mounted) setState(() => bookings = data);
+    final data = await getUpcomingBookings();
+    if (mounted) {
+      setState(() {
+        bookings = data;
+      });
+    }
   }
+
+  Future<List<Map<String, dynamic>>> getUpcomingBookings() async {
+  final user = Supabase.instance.client.auth.currentUser;
+
+  if (user == null) return [];
+
+  final res = await Supabase.instance.client
+      .from('bookings')
+      .select('''
+        booking_id,
+        schedule,
+        status,
+        carwashes(name)
+      ''')
+      .eq('user_id', user.id)
+      .gte('schedule', DateTime.now().toIso8601String())
+      .order('schedule')
+      .limit(1);
+
+  return List<Map<String, dynamic>>.from(res);
+}
 
   @override
   Widget build(BuildContext context) {
@@ -125,7 +150,7 @@ class _HomePageState extends State<HomePage> {
                   );
                 },
               );
-            }).toList(),
+            }),
 
           // Find car wash button
           Padding(
@@ -224,9 +249,25 @@ class _UpcomingCard extends StatelessWidget {
   }
 
   Widget _hasBooking() {
-    final carwashName = booking!['carwashes']?['name'] ?? 'Car Wash';
-    final scheduledAt = booking!['scheduled_at'] ?? '';
-    final serviceType = booking!['service_type'] ?? '';
+    final carwashName =
+        booking?['carwashes']?['name'] ?? 'Car Wash';
+
+    final scheduleRaw = booking?['schedule'];
+    final status = booking?['status'] ?? 'Pending';
+
+    String formattedDate = 'No schedule';
+
+    if (scheduleRaw != null) {
+      final date = DateTime.tryParse(scheduleRaw.toString());
+
+      if (date != null) {
+        formattedDate =
+            '${date.month}/${date.day}/${date.year} '
+            '${date.hour > 12 ? date.hour - 12 : date.hour}:'
+            '${date.minute.toString().padLeft(2, '0')} '
+            '${date.hour >= 12 ? 'PM' : 'AM'}';
+      }
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -241,37 +282,36 @@ class _UpcomingCard extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
-        const SizedBox(height: 6),
-        Text(
-          carwashName,
-          style: const TextStyle(
-            fontFamily: AppTextStyles.fontHeading,
-            fontSize: 14,
-            fontWeight: FontWeight.w700,
-            color: AppColors.dark,
-          ),
-        ),
-        const SizedBox(height: 2),
-        Text(
-          '$scheduledAt · $serviceType',
-          style: const TextStyle(fontSize: 12, color: AppColors.muted),
-        ),
+
         const SizedBox(height: 8),
+
+        // ROW 1: Name + View
         Row(
           children: [
+            Expanded(
+              child: Text(
+                carwashName,
+                style: const TextStyle(
+                  fontFamily: AppTextStyles.fontHeading,
+                  fontSize: 14,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+            ),
+
             GestureDetector(
               onTap: onTap,
               child: Container(
-                padding:
-                    const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
                 decoration: BoxDecoration(
                   color: AppColors.splash,
                   borderRadius: BorderRadius.circular(6),
                 ),
                 child: const Text(
-                  'View Queue',
+                  'View',
                   style: TextStyle(
-                    fontFamily: AppTextStyles.fontHeading,
                     fontSize: 11,
                     fontWeight: FontWeight.w700,
                     color: Colors.white,
@@ -279,20 +319,42 @@ class _UpcomingCard extends StatelessWidget {
                 ),
               ),
             ),
-            const SizedBox(width: 8),
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-              decoration: BoxDecoration(
-                color: AppColors.splashLight,
-                borderRadius: BorderRadius.circular(6),
+          ],
+        ),
+
+        const SizedBox(height: 6),
+
+        // ROW 2: Date + Status + Reschedule
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                '$formattedDate · $status',
+                style: const TextStyle(
+                  fontSize: 12,
+                  color: AppColors.muted,
+                ),
               ),
-              child: const Text(
-                'Reschedule',
-                style: TextStyle(
-                  fontFamily: AppTextStyles.fontHeading,
-                  fontSize: 11,
-                  fontWeight: FontWeight.w700,
-                  color: AppColors.splashDark,
+            ),
+
+            GestureDetector(
+              onTap: () {
+                // TODO: reschedule logic
+              },
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: 10, vertical: 5),
+                decoration: BoxDecoration(
+                  color: AppColors.splashLight,
+                  borderRadius: BorderRadius.circular(6),
+                ),
+                child: const Text(
+                  'Reschedule',
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w700,
+                    color: AppColors.splashDark,
+                  ),
                 ),
               ),
             ),

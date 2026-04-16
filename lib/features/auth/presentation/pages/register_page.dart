@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
-import 'auth_controller.dart';
-import 'validators.dart';
+import '../controllers/auth_controller.dart';
+import '../../../../core/utils/validators.dart';
 
 class RegisterPage extends StatefulWidget {
   const RegisterPage({super.key});

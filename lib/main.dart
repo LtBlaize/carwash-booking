@@ -1,12 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app_router.dart';
-import 'theme/app_theme.dart';
-import 'features/home/home_page.dart';
-import 'features/book/book_page.dart';
-import 'features/history/history_page.dart';
-import 'features/profile/profile_page.dart';
+import 'app/app_router.dart';
+import 'core/theme/app_theme.dart';
+import 'features/home/presentation/pages/home_page.dart';
+import 'features/booking/presentation/pages/book_page.dart';
+import 'features/booking/presentation/pages/history_page.dart';
+import 'features/profile/presentation/pages/profile_page.dart';
 
 final client = Supabase.instance.client;
 final supabase = Supabase.instance.client;

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
-import '../../theme/app_theme.dart';
-import '../../widgets/shared_widgets.dart';
+import '../../../../core/theme/app_theme.dart';
+import '../../../../shared/widgets/shared_widgets.dart';
 
 class HistoryPage extends StatefulWidget {
   const HistoryPage({super.key});
