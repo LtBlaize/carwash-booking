@@ -102,7 +102,7 @@ class _BookPageState extends State<BookPage> {
       
           
           // Section: Carwash Near Me
-          const SectionTitle('Carwash Near Me'),
+          const SectionTitle('All Carwashes'),
           if (isLoading)
             const Center(child: CircularProgressIndicator())
           else if (carwashes.isEmpty)

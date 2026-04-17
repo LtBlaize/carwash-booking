@@ -121,6 +121,62 @@ class _HomePageState extends State<HomePage> {
 
           // Promo banner
           _PromoBanner(),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const SectionTitle('Top Carwashes'),
+              GestureDetector(
+                onTap: () {
+                  Navigator.pushNamed(context, '/map');
+                },
+                child: const Text(
+                  'See all carwashes',
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.blue,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+              ),
+            ],
+          ),
+
+          if (isLoading)
+            const Center(child: CircularProgressIndicator())
+          else if (carwashes.isEmpty)
+            const Padding(
+              padding: EdgeInsets.all(20),
+              child: Text(
+                'No car washes available.',
+                style: TextStyle(color: AppColors.muted, fontSize: 13),
+              ),
+            )
+          else
+            ...carwashes.map((cw) {
+              return _CarwashCard(
+                name: cw['name'] ?? 'Car Wash',
+                lastVisit: 'Available now',
+                badgeLabel: 'Open',
+                badgeBg: Colors.green.shade50,
+                badgeColor: Colors.green,
+                onTap: () {
+                  Navigator.pushNamed(
+                    context,
+                    '/book',
+                    arguments: cw,
+                  );
+                },
+              );
+            }),
+
+          // Find car wash button
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+            child: OutlineButton2(
+              '+ Find a Car Wash',
+              fullWidth: true,
+            ),
+          ),
 
           // Section: Carwash Near Me
           const SectionTitle('Carwash Near Me'),
