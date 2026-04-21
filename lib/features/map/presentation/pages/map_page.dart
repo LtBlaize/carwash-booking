@@ -254,17 +254,17 @@ class _MapPageState extends State<MapPage> {
                                 ),
                                 const SizedBox(width: 8),
                                 MapRecenterButton(
-                                  onTap: () {
-                                    if (ctrl.userLocation != null) {
-                                      _mapController.move(
-                                        LatLng(
-                                          ctrl.userLocation!.latitude,
-                                          ctrl.userLocation!.longitude,
-                                        ),
-                                        14,
-                                      );
-                                    }
-                                  },
+                                  onTap: ctrl.locationDenied
+                                      ? null // or show a snackbar explaining why
+                                      : () {
+                                          _mapController.move(
+                                            LatLng(
+                                              ctrl.userLocation!.latitude,
+                                              ctrl.userLocation!.longitude,
+                                            ),
+                                            14,
+                                          );
+                                        },
                                 ),
                               ],
                             ),
@@ -295,10 +295,10 @@ class _MapPageState extends State<MapPage> {
                             ),
                           ],
                         ),
-                        child: const Row(
+                        child: Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            SizedBox(
+                            const SizedBox(
                               width: 16,
                               height: 16,
                               child: CircularProgressIndicator(
@@ -306,10 +306,12 @@ class _MapPageState extends State<MapPage> {
                                 color: Color(0xFF1D4ED8),
                               ),
                             ),
-                            SizedBox(width: 8),
+                            const SizedBox(width: 8),
                             Text(
-                              'Finding nearby car washes…',
-                              style: TextStyle(
+                              ctrl.locationDenied
+                                ? 'Loading all car washes…'
+                                : 'Finding nearby car washes…',
+                              style: const TextStyle(
                                   fontSize: 12, color: Color(0xFF64748B)),
                             ),
                           ],
@@ -374,9 +376,9 @@ class _BottomSheet extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      'Nearby Car Washes',
-                      style: TextStyle(
+                    Text(
+                      ctrl.listTitle, // ← 'Nearby Car Washes' or 'All Car Washes'
+                      style: const TextStyle(
                         fontSize: 15,
                         fontWeight: FontWeight.w800,
                         color: Color(0xFF1E293B),

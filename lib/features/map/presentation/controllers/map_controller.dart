@@ -3,25 +3,26 @@ import 'package:latlong2/latlong.dart';
 import '../../domain/entities/carwash_location_entity.dart';
 import '../../domain/entities/location_entity.dart';
 import '../../domain/usecases/get_current_location.dart';
-import '../../domain/usecases/get_nearby_carwashes.dart';
+import '../../domain/usecases/get_carwashes.dart';
 import '../../domain/usecases/filter_subscribed_carwashes.dart';
 
 class MapController extends ChangeNotifier {
   final GetCurrentLocation getCurrentLocation;
-  final GetNearbyCarwashes getNearbyCarwashes;
+  final GetCarwashes getCarwashes;
   final FilterSubscribedCarwashes filterSubscribedCarwashes;
 
   MapController({
     required this.getCurrentLocation,
-    required this.getNearbyCarwashes,
+    required this.getCarwashes,
     required this.filterSubscribedCarwashes,
   });
 
-  // Set from MapPage: (latLng, zoom) → _mapController.move(...)
   void Function(LatLng, double)? moveMap;
 
   LocationEntity? userLocation;
-  List<CarwashLocationEntity> nearbyCarwashes = [];
+  bool locationDenied = false; // ← track denial explicitly
+
+  List<CarwashLocationEntity> carwashList = [];
   List<CarwashLocationEntity> filteredCarwashes = [];
   CarwashLocationEntity? selectedCarwash;
 
@@ -30,12 +31,15 @@ class MapController extends ChangeNotifier {
   String searchQuery = '';
   String? error;
 
+  // Label for bottom sheet title
+  String get listTitle =>
+      locationDenied ? 'All Car Washes' : 'Nearby Car Washes';
+
   List<CarwashLocationEntity> get displayList {
-    final list = showSubscribedOnly ? filteredCarwashes : nearbyCarwashes;
+    final list = showSubscribedOnly ? filteredCarwashes : carwashList;
     if (searchQuery.isEmpty) return list;
     return list
-        .where(
-            (c) => c.name.toLowerCase().contains(searchQuery.toLowerCase()))
+        .where((c) => c.name.toLowerCase().contains(searchQuery.toLowerCase()))
         .toList();
   }
 
@@ -43,14 +47,28 @@ class MapController extends ChangeNotifier {
     isLoading = true;
     error = null;
     notifyListeners();
+
     try {
-      userLocation = await getCurrentLocation();
-      nearbyCarwashes = await getNearbyCarwashes(
-        latitude: userLocation!.latitude,
-        longitude: userLocation!.longitude,
-      );
+      userLocation = await getCurrentLocation(); // nullable
+      locationDenied = userLocation == null;
+
+      if (!locationDenied) {
+        // ✅ Location allowed → fetch nearby, center map
+        carwashList = await getCarwashes(
+          latitude: userLocation!.latitude,
+          longitude: userLocation!.longitude,
+        );
+        moveMap?.call(
+          LatLng(userLocation!.latitude, userLocation!.longitude),
+          14,
+        );
+      } else {
+        // ✅ Location blocked → fetch ALL, stay on default center
+        carwashList = await getCarwashes(); // no lat/lng = all
+      }
+
       filteredCarwashes = await filterSubscribedCarwashes(
-        carwashes: nearbyCarwashes,
+        carwashes: carwashList,
       );
     } catch (e) {
       error = e.toString();
@@ -62,7 +80,6 @@ class MapController extends ChangeNotifier {
 
   void selectCarwash(CarwashLocationEntity carwash) {
     selectedCarwash = carwash;
-    // flutter_map uses move() — called from MapPage via the passed-in controller
     moveMap?.call(LatLng(carwash.latitude, carwash.longitude), 16);
     notifyListeners();
   }
@@ -85,10 +102,5 @@ class MapController extends ChangeNotifier {
   void recenterToUser() {
     if (userLocation == null) return;
     moveMap?.call(LatLng(userLocation!.latitude, userLocation!.longitude), 14);
-  }
-
-  @override
-  void dispose() {
-    super.dispose();
   }
 }

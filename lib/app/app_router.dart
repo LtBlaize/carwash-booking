@@ -8,7 +8,7 @@ import '../features/booking/booking.dart';
 import '../features/map/presentation/pages/map_page.dart';
 import '../features/map/presentation/controllers/map_controller.dart';
 import '../features/map/domain/usecases/get_current_location.dart';    // ✅ domain, not data/domain
-import '../features/map/domain/usecases/get_nearby_carwashes.dart';    // ✅ domain, not data/domain
+import '../features/map/domain/usecases/get_carwashes.dart';    // ✅ domain, not data/domain
 import '../features/map/domain/usecases/filter_subscribed_carwashes.dart'; // ✅ domain, not data/domain
 import '../features/map/data/repositories/map_repository_impl.dart';   // ✅ new
 import '../features/map/data/datasources/location_datasource.dart';    // ✅ new
@@ -41,7 +41,7 @@ class AppRouter {
         builder: (_) => ChangeNotifierProvider(
           create: (_) => MapController(
             getCurrentLocation: GetCurrentLocation(mapRepository),
-            getNearbyCarwashes: GetNearbyCarwashes(mapRepository),
+            getCarwashes: GetCarwashes(mapRepository), // ← was getNearbyCarwashes: GetNearbyCarwashes(...)
             filterSubscribedCarwashes: FilterSubscribedCarwashes(mapRepository),
           ),
           child: const MapPage(),

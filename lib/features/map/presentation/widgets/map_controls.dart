@@ -1,12 +1,14 @@
 import 'package:flutter/material.dart';
 
 class MapRecenterButton extends StatelessWidget {
-  final VoidCallback onTap;
+  final VoidCallback? onTap; // ← nullable
 
   const MapRecenterButton({super.key, required this.onTap});
 
   @override
   Widget build(BuildContext context) {
+    final isDisabled = onTap == null;
+
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -17,17 +19,20 @@ class MapRecenterButton extends StatelessWidget {
           shape: BoxShape.circle,
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.12),
+              color: Colors.black.withOpacity(isDisabled ? 0.05 : 0.12),
               blurRadius: 8,
               offset: const Offset(0, 2),
             ),
           ],
         ),
         alignment: Alignment.center,
-        child: const Icon(
+        child: Icon(
           Icons.my_location_rounded,
           size: 20,
-          color: Color(0xFF1D4ED8),
+          // ← grayed out when location is denied
+          color: isDisabled
+              ? const Color(0xFFCBD5E1)
+              : const Color(0xFF1D4ED8),
         ),
       ),
     );

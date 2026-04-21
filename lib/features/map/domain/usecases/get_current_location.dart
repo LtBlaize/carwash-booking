@@ -5,5 +5,5 @@ class GetCurrentLocation {
   final MapRepository repository;
   const GetCurrentLocation(this.repository);
 
-  Future<LocationEntity> call() => repository.getCurrentLocation();
+  Future<LocationEntity?> call() => repository.getCurrentLocation(); // ← nullable
 }

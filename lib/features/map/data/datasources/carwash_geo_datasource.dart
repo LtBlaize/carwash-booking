@@ -6,11 +6,23 @@ class CarwashGeoDatasource {
 
   CarwashGeoDatasource(this.supabase);
 
-  Future<List<CarwashLocationModel>> getNearbyCarwashes({
-    required double latitude,
-    required double longitude,
+  Future<List<CarwashLocationModel>> getCarwashes({
+    double? latitude,
+    double? longitude,
     double radiusKm = 10,
   }) async {
+    // ✅ If no location → return ALL carwashes
+    if (latitude == null || longitude == null) {
+      final res = await supabase
+          .from('carwashes')
+          .select();
+
+      return (res as List)
+          .map((e) => CarwashLocationModel.fromMap(e))
+          .toList();
+    }
+
+    // ✅ If location exists → use nearby RPC
     final res = await supabase.rpc(
       'nearby_carwashes',
       params: {
@@ -23,7 +35,7 @@ class CarwashGeoDatasource {
     return (res as List)
         .map((e) => CarwashLocationModel.fromMap(
               e,
-              userLat: latitude,  // ✅ pass for haversine fallback
+              userLat: latitude,
               userLng: longitude,
             ))
         .toList();

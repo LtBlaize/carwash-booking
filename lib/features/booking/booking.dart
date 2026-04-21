@@ -1,7 +1,12 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:flutter_map/flutter_map.dart' as fm;
+import 'package:latlong2/latlong.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'dart:math' as math;
 import '../../core/theme/app_theme.dart';
+import '../../../features/map/data/datasources/location_datasource.dart';
 
 Map<String, dynamic>? carwash;
 
@@ -24,6 +29,10 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
   List<Map<String, dynamic>> _services = [];
   bool _loadingVehicles = true;
   bool _loadingServices = false;
+
+  // Map state
+  double? _userLat;
+  double? _userLng;
 
   late final AnimationController _fadeController;
   late final Animation<double> _fadeAnimation;
@@ -87,12 +96,12 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
     );
     _fadeController.forward();
 
-    // Read route arguments after first frame, then fetch
     WidgetsBinding.instance.addPostFrameCallback((_) {
       carwash = ModalRoute.of(context)?.settings.arguments
           as Map<String, dynamic>?;
       if (mounted) setState(() {});
       _fetchVehicles();
+      _loadUserLocation(); // ← load location on open
     });
   }
 
@@ -102,38 +111,54 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
     super.dispose();
   }
 
+  Future<void> _loadUserLocation() async {
+    final loc = await LocationDatasourceImpl().getCurrentLocation();
+    if (mounted) {
+      setState(() {
+        _userLat = loc?.latitude;
+        _userLng = loc?.longitude;
+      });
+    }
+  }
+
+  Future<void> _openDirections(double toLat, double toLng) async {
+    final uri = _userLat != null && _userLng != null
+        ? Uri.parse(
+            'https://www.google.com/maps/dir/?api=1'
+            '&origin=$_userLat,$_userLng'
+            '&destination=$toLat,$toLng'
+            '&travelmode=driving')
+        : Uri.parse(
+            'https://www.google.com/maps/search/?api=1'
+            '&query=$toLat,$toLng');
+    if (await canLaunchUrl(uri)) await launchUrl(uri);
+  }
+
   Future<void> _fetchVehicles() async {
     try {
       setState(() => _loadingVehicles = true);
-
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) {
         setState(() => _loadingVehicles = false);
         return;
       }
-
       final res = await Supabase.instance.client
           .from('vehicles')
           .select()
           .eq('user_id', user.id);
-
       final vehicles = List<Map<String, dynamic>>.from(res);
-
       if (!mounted) return;
-
       setState(() {
         _vehicles = vehicles;
         _loadingVehicles = false;
         _selectedVehicle = 0;
       });
-
       if (vehicles.isNotEmpty) {
         selectedSize = vehicles[0]['size_id'].toString();
         await _fetchServices();
       }
     } catch (e) {
       print('VEHICLE ERROR: $e');
-
       if (!mounted) return;
       setState(() {
         _loadingVehicles = false;
@@ -147,10 +172,8 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
       setState(() => _loadingServices = false);
       return;
     }
-
     try {
       setState(() => _loadingServices = true);
-
       final res = await Supabase.instance.client
           .from('serviceprices')
           .select('''
@@ -164,21 +187,15 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
           ''')
           .eq('carwash_id', carwash!['carwash_id'].toString())
           .eq('size_id', selectedSize.toString());
-
       final data = List<Map<String, dynamic>>.from(res);
-
       if (!mounted) return;
-
       setState(() {
         _services = data;
         _loadingServices = false;
         _selectedServices.clear();
       });
-
-      print('SERVICES FOUND: ${data.length}');
     } catch (e) {
       print('SERVICE ERROR: $e');
-
       if (!mounted) return;
       setState(() {
         _services = [];
@@ -191,7 +208,6 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
     if (!_canBook || _isBooking) return;
     setState(() => _isBooking = true);
     HapticFeedback.mediumImpact();
-
     try {
       final user = Supabase.instance.client.auth.currentUser;
       final slot = _slots[_selectedTimeSlot];
@@ -200,7 +216,6 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
         minute: _parseMinute(slot['label'] as String),
         second: 0,
       );
-
       final bookingRes = await Supabase.instance.client
           .from('bookings')
           .insert({
@@ -212,7 +227,6 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
           })
           .select()
           .single();
-
       final bookingId = bookingRes['booking_id'];
       for (final i in _selectedServices) {
         await Supabase.instance.client.from('bookingservices').insert({
@@ -220,7 +234,6 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
           'service_id': _services[i]['service_id'],
         });
       }
-
       if (context.mounted) {
         await _showBookingSuccess();
         Navigator.pop(context, true);
@@ -233,8 +246,8 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
             content: Text('Booking failed: ${e.toString()}'),
             backgroundColor: Colors.red.shade700,
             behavior: SnackBarBehavior.floating,
-            shape:
-                RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+            shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(10)),
           ),
         );
       }
@@ -362,7 +375,6 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
   }
 
   String _vehicleLabel(Map<String, dynamic> v) {
-    // e.g. "Toyota Vios" or fall back to plate
     final brand = v['brand']?.toString() ?? '';
     final model = v['model']?.toString() ?? '';
     if (brand.isNotEmpty || model.isNotEmpty) return '$brand $model'.trim();
@@ -377,6 +389,9 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
 
   @override
   Widget build(BuildContext context) {
+    final cwLat = (carwash?['latitude'] as num?)?.toDouble();
+    final cwLng = (carwash?['longitude'] as num?)?.toDouble();
+
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: AppBar(
@@ -444,11 +459,25 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
         child: ListView(
           padding: EdgeInsets.zero,
           children: [
+            // Progress bar
             _BookingProgressBar(
               hasVehicle: _vehicles.isNotEmpty,
               hasService: _selectedServices.isNotEmpty,
               hasTime: _selectedTimeSlot >= 0,
             ),
+            const SizedBox(height: 8),
+
+            // ── Map ──────────────────────────────────────────────────────
+            if (cwLat != null && cwLng != null)
+              _BookingMap(
+                carwashLat: cwLat,
+                carwashLng: cwLng,
+                carwashName: carwash!['name'] ?? 'Car Wash',
+                userLat: _userLat,
+                userLng: _userLng,
+                onDirectionsTap: () => _openDirections(cwLat, cwLng),
+              ),
+
             const SizedBox(height: 4),
 
             // Step 1: Vehicle
@@ -497,7 +526,7 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
               title: 'Select Services',
               isComplete: _selectedServices.isNotEmpty,
               child: _loadingServices && _services.isEmpty
-                ? const _LoadingPlaceholder()
+                  ? const _LoadingPlaceholder()
                   : _services.isEmpty
                       ? const _EmptyState(
                           icon: Icons.cleaning_services_outlined,
@@ -538,20 +567,20 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
                             ...List.generate(_services.length, (i) {
                               final s = _services[i];
                               final sel = _selectedServices.contains(i);
-                              final name = (s['services'] as Map?)?['name']
-                                      ?.toString() ??
-                                  'Service';
-                              final desc = (s['services'] as Map?)?[
-                                          'description']
-                                      ?.toString() ??
-                                  '';
+                              final name =
+                                  (s['services'] as Map?)?['name']
+                                          ?.toString() ??
+                                      'Service';
+                              final desc =
+                                  (s['services'] as Map?)?['description']
+                                          ?.toString() ??
+                                      '';
                               final durationMin = (s['services']
                                   as Map?)?['duration_minutes'];
                               final duration = durationMin != null
                                   ? '$durationMin min'
                                   : '';
                               final price = '₱${s['price']}';
-
                               return _ServiceCard(
                                 name: name,
                                 description: desc,
@@ -821,7 +850,293 @@ class _BookPageState extends State<BookPage> with TickerProviderStateMixin {
   }
 }
 
-// ─── Sub-widgets ──────────────────────────────────────────────────────────────
+// ─── Booking Map ──────────────────────────────────────────────────────────────
+
+class _BookingMap extends StatelessWidget {
+  final double carwashLat;
+  final double carwashLng;
+  final String carwashName;
+  final double? userLat;
+  final double? userLng;
+  final VoidCallback onDirectionsTap;
+
+  const _BookingMap({
+    required this.carwashLat,
+    required this.carwashLng,
+    required this.carwashName,
+    required this.userLat,
+    required this.userLng,
+    required this.onDirectionsTap,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final hasUserLocation = userLat != null && userLng != null;
+    final center = hasUserLocation
+        ? LatLng(
+            (userLat! + carwashLat) / 2,
+            (userLng! + carwashLng) / 2,
+          )
+        : LatLng(carwashLat, carwashLng);
+    final zoom = hasUserLocation ? 13.0 : 15.0;
+
+    return Container(
+      margin: const EdgeInsets.fromLTRB(12, 0, 12, 0),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppColors.border, width: 1.5),
+      ),
+      padding: const EdgeInsets.all(12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // Header
+          Row(
+            children: const [
+              Icon(Icons.location_on_rounded,
+                  size: 15, color: AppColors.splash),
+              SizedBox(width: 6),
+              Text(
+                'Location',
+                style: TextStyle(
+                  fontFamily: AppTextStyles.fontHeading,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w700,
+                  color: AppColors.dark,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // ETA badges
+          if (hasUserLocation)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: _EtaBadge(
+                userLat: userLat!,
+                userLng: userLng!,
+                carwashLat: carwashLat,
+                carwashLng: carwashLng,
+              ),
+            )
+          else
+            const Padding(
+              padding: EdgeInsets.only(bottom: 10),
+              child: Row(
+                children: [
+                  Icon(Icons.location_off_rounded,
+                      size: 13, color: Color(0xFF94A3B8)),
+                  SizedBox(width: 5),
+                  Text(
+                    'Enable location to see ETA & directions',
+                    style:
+                        TextStyle(fontSize: 11, color: Color(0xFF94A3B8)),
+                  ),
+                ],
+              ),
+            ),
+
+          // Map
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: SizedBox(
+              height: 180,
+              child: IgnorePointer(
+                child: fm.FlutterMap(
+                  options: fm.MapOptions(
+                    initialCenter: center,
+                    initialZoom: zoom,
+                    interactionOptions: const fm.InteractionOptions(
+                      flags: fm.InteractiveFlag.none,
+                    ),
+                  ),
+                  children: [
+                    fm.TileLayer(
+                      urlTemplate:
+                          'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                      userAgentPackageName: 'com.example.carwash_booking',
+                    ),
+                    if (hasUserLocation)
+                      fm.PolylineLayer(
+                        polylines: [
+                          fm.Polyline(
+                            points: [
+                              LatLng(userLat!, userLng!),
+                              LatLng(carwashLat, carwashLng),
+                            ],
+                            strokeWidth: 3,
+                            color: AppColors.splash,
+                          ),
+                        ],
+                      ),
+                    fm.MarkerLayer(
+                      markers: [
+                        fm.Marker(
+                          point: LatLng(carwashLat, carwashLng),
+                          width: 40,
+                          height: 40,
+                          child: Container(
+                            decoration: BoxDecoration(
+                              color: AppColors.splash,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                  color: Colors.white, width: 2.5),
+                              boxShadow: [
+                                BoxShadow(
+                                  color:
+                                      AppColors.splash.withOpacity(0.4),
+                                  blurRadius: 8,
+                                ),
+                              ],
+                            ),
+                            child: const Icon(
+                              Icons.local_car_wash_rounded,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                        if (hasUserLocation)
+                          fm.Marker(
+                            point: LatLng(userLat!, userLng!),
+                            width: 36,
+                            height: 36,
+                            child: Container(
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                shape: BoxShape.circle,
+                                border: Border.all(
+                                    color: AppColors.splash, width: 2),
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: Colors.black.withOpacity(0.15),
+                                    blurRadius: 6,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.person_rounded,
+                                color: AppColors.splash,
+                                size: 18,
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+
+          const SizedBox(height: 10),
+
+          // Directions button
+          GestureDetector(
+            onTap: onDirectionsTap,
+            child: Container(
+              width: double.infinity,
+              padding: const EdgeInsets.symmetric(
+                  vertical: 10, horizontal: 14),
+              decoration: BoxDecoration(
+                color: const Color(0xFFEFF6FF),
+                borderRadius: BorderRadius.circular(8),
+                border: Border.all(color: const Color(0xFFBFDBFE)),
+              ),
+              child: Row(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  const Icon(Icons.directions_rounded,
+                      size: 15, color: AppColors.splash),
+                  const SizedBox(width: 6),
+                  Text(
+                    hasUserLocation
+                        ? 'Get Directions in Google Maps'
+                        : 'View in Google Maps',
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: AppColors.splash,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── ETA Badge ────────────────────────────────────────────────────────────────
+
+class _EtaBadge extends StatelessWidget {
+  final double userLat, userLng, carwashLat, carwashLng;
+
+  const _EtaBadge({
+    required this.userLat,
+    required this.userLng,
+    required this.carwashLat,
+    required this.carwashLng,
+  });
+
+  double _distanceKm() {
+    const r = 6371.0;
+    final dLat = (carwashLat - userLat) * math.pi / 180;
+    final dLng = (carwashLng - userLng) * math.pi / 180;
+    final a = math.pow(math.sin(dLat / 2), 2) +
+        math.cos(userLat * math.pi / 180) *
+            math.cos(carwashLat * math.pi / 180) *
+            math.pow(math.sin(dLng / 2), 2);
+    return r * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a));
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final km = _distanceKm();
+    final mins = (km / 0.5).ceil().clamp(1, 120);
+
+    return Row(
+      children: [
+        _badge(
+          Icons.straighten_rounded,
+          '${km.toStringAsFixed(1)} km away',
+          const Color(0xFFEFF6FF),
+          AppColors.splash,
+        ),
+        const SizedBox(width: 8),
+        _badge(
+          Icons.access_time_rounded,
+          '~$mins min drive',
+          const Color(0xFFF0FDF4),
+          const Color(0xFF16A34A),
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(IconData icon, String label, Color bg, Color fg) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+          color: bg, borderRadius: BorderRadius.circular(20)),
+      child: Row(
+        children: [
+          Icon(icon, size: 12, color: fg),
+          const SizedBox(width: 4),
+          Text(label,
+              style: TextStyle(
+                  fontSize: 11, fontWeight: FontWeight.w600, color: fg)),
+        ],
+      ),
+    );
+  }
+}
+
+// ─── Sub-widgets (unchanged) ──────────────────────────────────────────────────
 
 class _BookingProgressBar extends StatelessWidget {
   final bool hasVehicle;
@@ -865,8 +1180,7 @@ class _BookingProgressBar extends StatelessWidget {
                       width: 8,
                       height: 8,
                       decoration: BoxDecoration(
-                        color:
-                            done ? AppColors.emerald : AppColors.border,
+                        color: done ? AppColors.emerald : AppColors.border,
                         shape: BoxShape.circle,
                       ),
                     ),
@@ -883,8 +1197,7 @@ class _BookingProgressBar extends StatelessWidget {
               value: completed / 3,
               minHeight: 4,
               backgroundColor: AppColors.border,
-              valueColor:
-                  AlwaysStoppedAnimation<Color>(AppColors.splash),
+              valueColor: AlwaysStoppedAnimation<Color>(AppColors.splash),
             ),
           ),
         ],
@@ -1239,8 +1552,7 @@ class _BookingSummary extends StatelessWidget {
   Widget build(BuildContext context) {
     int totalMinutes = 0;
     for (final i in selectedServices) {
-      final mins =
-          (services[i]['services'] as Map?)?['duration_minutes'];
+      final mins = (services[i]['services'] as Map?)?['duration_minutes'];
       totalMinutes += int.tryParse(mins?.toString() ?? '0') ?? 0;
     }
 
@@ -1249,8 +1561,7 @@ class _BookingSummary extends StatelessWidget {
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: AppColors.splash50,
-        border:
-            Border.all(color: const Color(0xFFBAE6FD), width: 1.5),
+        border: Border.all(color: const Color(0xFFBAE6FD), width: 1.5),
         borderRadius: BorderRadius.circular(14),
       ),
       child: Column(
@@ -1274,16 +1585,15 @@ class _BookingSummary extends StatelessWidget {
           ),
           const SizedBox(height: 12),
           ...selectedServices.map((i) {
-            final name = (services[i]['services'] as Map?)?['name']
-                    ?.toString() ??
-                'Service';
+            final name =
+                (services[i]['services'] as Map?)?['name']?.toString() ??
+                    'Service';
             final price = '₱${services[i]['price']}';
             return _SummaryRow(name, price);
           }),
           const SizedBox(height: 4),
           const Divider(color: Color(0xFFBAE6FD), height: 16),
-          if (timeSlot != null)
-            _SummaryRow('📅  $date at $timeSlot', ''),
+          if (timeSlot != null) _SummaryRow('📅  $date at $timeSlot', ''),
           if (totalMinutes > 0)
             _SummaryRow('⏱️  Est. duration', '$totalMinutes min'),
           const Divider(color: Color(0xFFBAE6FD), height: 16),
@@ -1418,8 +1728,8 @@ class _EmptyState extends StatelessWidget {
                   color: AppColors.dark)),
           const SizedBox(height: 2),
           Text(hint,
-              style: const TextStyle(
-                  fontSize: 12, color: AppColors.muted)),
+              style:
+                  const TextStyle(fontSize: 12, color: AppColors.muted)),
           if (actionLabel != null && onAction != null) ...[
             const SizedBox(height: 12),
             GestureDetector(
@@ -1473,8 +1783,8 @@ class _ValidationHints extends StatelessWidget {
           const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
       decoration: BoxDecoration(
         color: const Color(0xFFFFF7ED),
-        border: Border.all(
-            color: const Color(0xFFFDBA74), width: 1),
+        border:
+            Border.all(color: const Color(0xFFFDBA74), width: 1),
         borderRadius: BorderRadius.circular(10),
       ),
       child: Row(

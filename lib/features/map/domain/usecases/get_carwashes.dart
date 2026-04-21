@@ -1,16 +1,16 @@
 import '../entities/carwash_location_entity.dart';
 import '../repositories/map_repository.dart';
 
-class GetNearbyCarwashes {
+class GetCarwashes {
   final MapRepository repository;
-  const GetNearbyCarwashes(this.repository);
+  const GetCarwashes(this.repository);
 
   Future<List<CarwashLocationEntity>> call({
-    required double latitude,
-    required double longitude,
+    double? latitude,
+    double? longitude,
     double radiusKm = 10,
   }) =>
-      repository.getNearbyCarwashes(
+      repository.getCarwashes(
         latitude: latitude,
         longitude: longitude,
         radiusKm: radiusKm,
