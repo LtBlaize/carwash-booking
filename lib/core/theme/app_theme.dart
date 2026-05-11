@@ -107,7 +107,10 @@ class AppTextStyles {
 
 class AppTheme {
   static ThemeData get theme => ThemeData(
-        useMaterial3: false,
+        // ✅ FIX: `useMaterial3: false` was removed in Flutter 3.27 — the flag
+        //         no longer exists. Material 3 is now always active.
+        //         Audit any widgets that relied on M2 behaviour (e.g. AppBar
+        //         elevation, card shapes) and update them individually.
         scaffoldBackgroundColor: AppColors.bg,
         fontFamily: AppTextStyles.fontBody,
         appBarTheme: const AppBarTheme(

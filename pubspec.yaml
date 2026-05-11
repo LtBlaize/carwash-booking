@@ -26,3 +26,30 @@ dev_dependencies:
 
 flutter:
   uses-material-design: true
+
+  # ✅ FIX: Declare the two custom fonts used in AppTextStyles.
+  #         Place the font files in assets/fonts/ in your project root,
+  #         then download them from Google Fonts:
+  #           • Plus Jakarta Sans → fonts/PlusJakartaSans-*.ttf
+  #           • DM Sans          → fonts/DMSans-*.ttf
+  fonts:
+    - family: PlusJakartaSans
+      fonts:
+        - asset: assets/fonts/PlusJakartaSans-Regular.ttf
+        - asset: assets/fonts/PlusJakartaSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/PlusJakartaSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/PlusJakartaSans-Bold.ttf
+          weight: 700
+        - asset: assets/fonts/PlusJakartaSans-ExtraBold.ttf
+          weight: 800
+    - family: DMSans
+      fonts:
+        - asset: assets/fonts/DMSans-Regular.ttf
+        - asset: assets/fonts/DMSans-Medium.ttf
+          weight: 500
+        - asset: assets/fonts/DMSans-SemiBold.ttf
+          weight: 600
+        - asset: assets/fonts/DMSans-Bold.ttf
+          weight: 700

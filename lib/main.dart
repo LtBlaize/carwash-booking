@@ -46,7 +46,6 @@ class MyApp extends StatelessWidget {
 }
 
 // ─── MAIN SHELL (bottom nav wrapper) ─────────────────────────
-// AppRouter should navigate to '/home' which renders this shell.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -120,9 +119,11 @@ class _BottomNav extends StatelessWidget {
                         items[i]['icon']!,
                         style: TextStyle(
                           fontSize: 20,
+                          // ✅ FIX: withOpacity is deprecated in Flutter 3.27+.
+                          //         Use Color.fromRGBO or withValues instead.
                           color: active
                               ? null
-                              : Colors.black.withOpacity(0.3),
+                              : Colors.black.withValues(alpha: 0.3),
                         ),
                       ),
                       const SizedBox(height: 3),

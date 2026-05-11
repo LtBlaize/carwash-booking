@@ -7,14 +7,13 @@ import '../features/auth/presentation/pages/register_page.dart';
 import '../features/booking/booking.dart';
 import '../features/map/presentation/pages/map_page.dart';
 import '../features/map/presentation/controllers/map_controller.dart';
-import '../features/map/domain/usecases/get_current_location.dart';    // ✅ domain, not data/domain
-import '../features/map/domain/usecases/get_carwashes.dart';    // ✅ domain, not data/domain
-import '../features/map/domain/usecases/filter_subscribed_carwashes.dart'; // ✅ domain, not data/domain
-import '../features/map/data/repositories/map_repository_impl.dart';   // ✅ new
-import '../features/map/data/datasources/location_datasource.dart';    // ✅ new
-import '../features/map/data/datasources/carwash_geo_datasource.dart'; // ✅ new
+import '../features/map/domain/usecases/get_current_location.dart';
+import '../features/map/domain/usecases/get_carwashes.dart';
+import '../features/map/domain/usecases/filter_subscribed_carwashes.dart';
+import '../features/map/data/repositories/map_repository_impl.dart';
+import '../features/map/data/datasources/location_datasource.dart';
+import '../features/map/data/datasources/carwash_geo_datasource.dart';
 import '../main.dart';
-
 
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
@@ -24,29 +23,36 @@ class AppRouter {
 
       case '/register':
         return MaterialPageRoute(builder: (_) => const RegisterPage());
-       case '/home':                                                      // ✅ re-added
+
+      case '/home':
         return MaterialPageRoute(builder: (_) => const MainShell());
 
+      // ✅ FIX 1: Added missing `case '/map':` label.
+      // ✅ FIX 2: Wrapped body in `{}` so local variables are scoped correctly
+      //           inside a switch case — Dart requires this.
       case '/map':
-      final supabase = Supabase.instance.client;  // ✅ get the client once
+        {
+          final supabase = Supabase.instance.client;
+          final locationDatasource = LocationDatasourceImpl();
+          final carwashGeoDatasource = CarwashGeoDatasource(supabase);
+          final mapRepository = MapRepositoryImpl(
+            locationDatasource: locationDatasource,
+            carwashGeoDatasource: carwashGeoDatasource,
+          );
 
-      final locationDatasource = LocationDatasourceImpl();
-      final carwashGeoDatasource = CarwashGeoDatasource(supabase); // ✅ pass it in
-      final mapRepository = MapRepositoryImpl(
-        locationDatasource: locationDatasource,
-        carwashGeoDatasource: carwashGeoDatasource,
-      );
+          return MaterialPageRoute(
+            builder: (_) => ChangeNotifierProvider(
+              create: (_) => MapController(
+                getCurrentLocation: GetCurrentLocation(mapRepository),
+                getCarwashes: GetCarwashes(mapRepository),
+                filterSubscribedCarwashes:
+                    FilterSubscribedCarwashes(mapRepository),
+              ),
+              child: const MapPage(),
+            ),
+          );
+        }
 
-      return MaterialPageRoute(
-        builder: (_) => ChangeNotifierProvider(
-          create: (_) => MapController(
-            getCurrentLocation: GetCurrentLocation(mapRepository),
-            getCarwashes: GetCarwashes(mapRepository), // ← was getNearbyCarwashes: GetNearbyCarwashes(...)
-            filterSubscribedCarwashes: FilterSubscribedCarwashes(mapRepository),
-          ),
-          child: const MapPage(),
-        ),
-      );
       case '/book':
         return MaterialPageRoute(
           builder: (_) => const BookPage(),

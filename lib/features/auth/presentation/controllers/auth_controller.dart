@@ -1,18 +1,14 @@
+// ✅ FIX: Removed duplicate AuthException class definition.
+//         AuthException lives in auth_service.dart — import it from there.
+//         Having two definitions causes a clash when both files are imported
+//         in the same page (e.g. register_page.dart imports both).
 import '../../../../core/services/auth_service.dart';
 
-class AuthException implements Exception {
-  final String message;
-  final String? code;
-  const AuthException(this.message, {this.code});
-
-  @override
-  String toString() => 'AuthException: $message${code != null ? ' ($code)' : ''}';
-}
+export '../../../../core/services/auth_service.dart' show AuthException;
 
 class AuthController {
   final AuthService _service;
 
-  // Dependency injection — makes unit testing possible
   AuthController({AuthService? service}) : _service = service ?? AuthService();
 
   Future<void> login(String email, String password) async {
@@ -20,7 +16,7 @@ class AuthController {
     try {
       await _service.login(email, password);
     } on AuthException {
-      rethrow; // Let typed exceptions bubble up
+      rethrow;
     } catch (e) {
       throw AuthException('Login failed: ${e.toString()}', code: 'LOGIN_ERROR');
     }
@@ -33,7 +29,8 @@ class AuthController {
     } on AuthException {
       rethrow;
     } catch (e) {
-      throw AuthException('Registration failed: ${e.toString()}', code: 'REGISTER_ERROR');
+      throw AuthException(
+          'Registration failed: ${e.toString()}', code: 'REGISTER_ERROR');
     }
   }
 
@@ -41,7 +38,8 @@ class AuthController {
     try {
       await _service.logout();
     } catch (e) {
-      throw AuthException('Logout failed: ${e.toString()}', code: 'LOGOUT_ERROR');
+      throw AuthException('Logout failed: ${e.toString()}',
+          code: 'LOGOUT_ERROR');
     }
   }
 
@@ -50,7 +48,8 @@ class AuthController {
       throw AuthException('Invalid email format', code: 'INVALID_EMAIL');
     }
     if (password.length < 8) {
-      throw AuthException('Password must be at least 8 characters', code: 'WEAK_PASSWORD');
+      throw AuthException('Password must be at least 8 characters',
+          code: 'WEAK_PASSWORD');
     }
   }
 }

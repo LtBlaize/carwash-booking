@@ -1,4 +1,6 @@
 import 'package:flutter/material.dart';
+// ✅ FIX: supabase_flutter re-exports its own AuthException from gotrue.
+//         Hide it so Dart uses YOUR AuthException from auth_controller.dart.
 import 'package:supabase_flutter/supabase_flutter.dart' hide AuthException;
 import '../controllers/auth_controller.dart';
 import '../../../../core/utils/validators.dart';
@@ -61,13 +63,11 @@ class _RegisterPageState extends State<RegisterPage> {
     setState(() => _loading = true);
 
     try {
-      // 1. Create auth user
       await _auth.register(_email.text.trim(), _password.text);
 
       final user = Supabase.instance.client.auth.currentUser;
       if (user == null) throw AuthException('Signup failed', code: 'NO_USER');
 
-      // 2. Insert profile row
       await Supabase.instance.client.from('profiles').insert({
         'id':         user.id,
         'full_name':  _name.text.trim(),
@@ -314,7 +314,8 @@ class _AuthField extends StatelessWidget {
         hintText: placeholder,
         hintStyle: TextStyle(
           fontSize: 13,
-          color: scheme.onSurfaceVariant.withOpacity(0.5)),
+          // ✅ FIX: withOpacity deprecated in Flutter 3.27+ → use withValues
+          color: scheme.onSurfaceVariant.withValues(alpha: 0.5)),
         labelStyle: TextStyle(
           fontSize: 12,
           fontWeight: FontWeight.w500,
