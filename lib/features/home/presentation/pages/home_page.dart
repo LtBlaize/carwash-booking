@@ -1,9 +1,10 @@
+// lib/features/home/presentation/pages/home_page.dart
+
 import 'package:flutter/material.dart';
 import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 import '../../../../core/services/auth_service.dart';
-import '../../../auth/carwash_service.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
+import'../../../../features/auth/carwash_service.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -13,67 +14,42 @@ class HomePage extends StatefulWidget {
 }
 
 class _HomePageState extends State<HomePage> {
-  final auth = AuthService();
-  final carwashService = CarwashService();
+  final _auth = AuthService();
+  final _carwashService = CarwashService();
 
-  List<Map<String, dynamic>> carwashes = [];
-  List<Map<String, dynamic>> bookings = [];
-  bool isLoading = true;
-  String userName = '';
+  List<Map<String, dynamic>> _carwashes = [];
+  List<Map<String, dynamic>> _bookings = [];
+  bool _isLoading = true;
+  String _userName = '';
 
   @override
   void initState() {
     super.initState();
     _loadUserName();
-    fetchCarwashes();
-    fetchUpcomingBookings();
+    _fetchCarwashes();
+    _fetchUpcomingBookings();
   }
 
   Future<void> _loadUserName() async {
-    final name = await auth.getUserName();
-    print('DEBUG name: $name');
-    if (mounted) setState(() => userName = name);
+    final name = await _auth.getUserName();
+    if (mounted) setState(() => _userName = name);
   }
 
-  Future<void> fetchCarwashes() async {
-    final data = await carwashService.getCarwashes();
+  Future<void> _fetchCarwashes() async {
+    final data = await _carwashService.getCarwashes();
     if (mounted) {
       setState(() {
-        carwashes = data;
-        isLoading = false;
+        _carwashes = data;
+        _isLoading = false;
       });
     }
   }
 
-  Future<void> fetchUpcomingBookings() async {
-    final data = await getUpcomingBookings();
-    if (mounted) {
-      setState(() {
-        bookings = data;
-      });
-    }
+  // ✅ FIX 12: delegates to CarwashService — removes duplicate inline query
+  Future<void> _fetchUpcomingBookings() async {
+    final data = await _carwashService.getUpcomingBookings();
+    if (mounted) setState(() => _bookings = data);
   }
-
-  Future<List<Map<String, dynamic>>> getUpcomingBookings() async {
-  final user = Supabase.instance.client.auth.currentUser;
-
-  if (user == null) return [];
-
-  final res = await Supabase.instance.client
-      .from('bookings')
-      .select('''
-        booking_id,
-        schedule,
-        status,
-        carwashes(name)
-      ''')
-      .eq('user_id', user.id)
-      .gte('schedule', DateTime.now().toIso8601String())
-      .order('schedule')
-      .limit(1);
-
-  return List<Map<String, dynamic>>.from(res);
-}
 
   @override
   Widget build(BuildContext context) {
@@ -84,19 +60,20 @@ class _HomePageState extends State<HomePage> {
           IconButton(
             icon: const Icon(Icons.logout, color: AppColors.muted, size: 20),
             onPressed: () async {
-              await auth.logout();
-              Navigator.pushReplacementNamed(context, '/login');
+              await _auth.logout();
+              if (context.mounted) {
+                Navigator.pushReplacementNamed(context, '/login');
+              }
             },
           ),
         ],
       ),
       body: ListView(
         children: [
-          // Greeting
           Padding(
             padding: const EdgeInsets.fromLTRB(20, 18, 20, 0),
             child: Text(
-              'Hi $userName! 👋',
+              'Hi $_userName! 👋',
               style: const TextStyle(
                 fontFamily: AppTextStyles.fontHeading,
                 fontSize: 20,
@@ -113,37 +90,38 @@ class _HomePageState extends State<HomePage> {
             ),
           ),
 
-          // Upcoming booking card
+          // ✅ FIX 12: View button navigates to /history instead of () {}
           _UpcomingCard(
-            booking: bookings.isNotEmpty ? bookings.first : null,
-            onTap: () {},
+            booking: _bookings.isNotEmpty ? _bookings.first : null,
+            onTap: () => Navigator.pushNamed(context, '/history'),
           ),
 
-          // Promo banner
           _PromoBanner(),
+
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
               const SectionTitle('Top Carwashes'),
               GestureDetector(
-                onTap: () {
-                  Navigator.pushNamed(context, '/map');
-                },
-                child: const Text(
-                  'See all carwashes',
-                  style: TextStyle(
-                    fontSize: 12,
-                    color: Colors.blue,
-                    fontWeight: FontWeight.w500,
+                onTap: () => Navigator.pushNamed(context, '/map'),
+                child: const Padding(
+                  padding: EdgeInsets.only(right: 16),
+                  child: Text(
+                    'See all',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Colors.blue,
+                      fontWeight: FontWeight.w500,
+                    ),
                   ),
                 ),
               ),
             ],
           ),
 
-          if (isLoading)
+          if (_isLoading)
             const Center(child: CircularProgressIndicator())
-          else if (carwashes.isEmpty)
+          else if (_carwashes.isEmpty)
             const Padding(
               padding: EdgeInsets.all(20),
               child: Text(
@@ -152,68 +130,22 @@ class _HomePageState extends State<HomePage> {
               ),
             )
           else
-            ...carwashes.map((cw) {
-              return _CarwashCard(
-                name: cw['name'] ?? 'Car Wash',
-                lastVisit: 'Available now',
-                badgeLabel: 'Open',
-                badgeBg: Colors.green.shade50,
-                badgeColor: Colors.green,
-                onTap: () {
-                  Navigator.pushNamed(
+            ..._carwashes.map((cw) => _CarwashCard(
+                  name: cw['name'] ?? 'Car Wash',
+                  status: cw['status']?.toString() ?? 'Open',
+                  onTap: () => Navigator.pushNamed(
                     context,
                     '/book',
                     arguments: cw,
-                  );
-                },
-              );
-            }),
+                  ),
+                )),
 
-          // Find car wash button
           Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 32),
             child: OutlineButton2(
               '+ Find a Car Wash',
               fullWidth: true,
-            ),
-          ),
-
-          // Section: Carwash Near Me
-          const SectionTitle('Carwash Near Me'),
-          if (isLoading)
-            const Center(child: CircularProgressIndicator())
-          else if (carwashes.isEmpty)
-            const Padding(
-              padding: EdgeInsets.all(20),
-              child: Text(
-                'No car washes available.',
-                style: TextStyle(color: AppColors.muted, fontSize: 13),
-              ),
-            )
-          else
-            ...carwashes.map((cw) {
-              return _CarwashCard(
-                name: cw['name'] ?? 'Car Wash',
-                lastVisit: 'Available now',
-                badgeLabel: 'Open',
-                badgeBg: Colors.green.shade50,
-                badgeColor: Colors.green,
-                onTap: () {
-                  Navigator.pushNamed(
-                    context,
-                    '/book',
-                    arguments: cw,
-                  );
-                },
-              );
-            }),
-
-          // Find car wash button
-          Padding(
-            padding: const EdgeInsets.fromLTRB(16, 10, 16, 20),
-            child: OutlineButton2(
-              '+ Find a Car Wash',
-              fullWidth: true,
+              onTap: () => Navigator.pushNamed(context, '/map'),
             ),
           ),
         ],
@@ -237,10 +169,10 @@ class _UpcomingCard extends StatelessWidget {
       decoration: BoxDecoration(
         color: Colors.white,
         borderRadius: BorderRadius.circular(10),
-        border: Border.all(color: AppColors.border), // ✅ uniform — no crash
+        border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.05),
+            color: Colors.black.withValues(alpha: 0.05),
             blurRadius: 4,
             offset: const Offset(0, 1),
           ),
@@ -252,12 +184,7 @@ class _UpcomingCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              // ✅ Left accent bar as a separate widget — avoids non-uniform border crash
-              Container(
-                width: 4,
-                color: AppColors.splash,
-              ),
-              // Content
+              Container(width: 4, color: AppColors.splash),
               Expanded(
                 child: Padding(
                   padding: const EdgeInsets.all(14),
@@ -305,23 +232,20 @@ class _UpcomingCard extends StatelessWidget {
   }
 
   Widget _hasBooking() {
-    final carwashName =
-        booking?['carwashes']?['name'] ?? 'Car Wash';
-
+    final carwashName = booking?['carwashes']?['name'] ?? 'Car Wash';
     final scheduleRaw = booking?['schedule'];
     final status = booking?['status'] ?? 'Pending';
 
     String formattedDate = 'No schedule';
-
     if (scheduleRaw != null) {
       final date = DateTime.tryParse(scheduleRaw.toString());
-
       if (date != null) {
+        final h = date.hour > 12
+            ? date.hour - 12
+            : (date.hour == 0 ? 12 : date.hour);
+        final period = date.hour >= 12 ? 'PM' : 'AM';
         formattedDate =
-            '${date.month}/${date.day}/${date.year} '
-            '${date.hour > 12 ? date.hour - 12 : date.hour}:'
-            '${date.minute.toString().padLeft(2, '0')} '
-            '${date.hour >= 12 ? 'PM' : 'AM'}';
+            '${date.month}/${date.day}/${date.year} $h:${date.minute.toString().padLeft(2, '0')} $period';
       }
     }
 
@@ -338,10 +262,7 @@ class _UpcomingCard extends StatelessWidget {
             letterSpacing: 0.5,
           ),
         ),
-
         const SizedBox(height: 8),
-
-        // ROW 1: Name + View
         Row(
           children: [
             Expanded(
@@ -355,7 +276,7 @@ class _UpcomingCard extends StatelessWidget {
                 ),
               ),
             ),
-
+            // ✅ FIX 12: onTap wired at call site — navigates to /history
             GestureDetector(
               onTap: onTap,
               child: Container(
@@ -377,22 +298,16 @@ class _UpcomingCard extends StatelessWidget {
             ),
           ],
         ),
-
         const SizedBox(height: 6),
-
-        // ROW 2: Date + Status + Reschedule
         Row(
           children: [
             Expanded(
               child: Text(
                 '$formattedDate · $status',
                 style: const TextStyle(
-                  fontSize: 12,
-                  color: AppColors.muted,
-                ),
+                    fontSize: 12, color: AppColors.muted),
               ),
             ),
-
             GestureDetector(
               onTap: () {
                 // TODO: reschedule logic
@@ -475,25 +390,23 @@ class _PromoBanner extends StatelessWidget {
 
 class _CarwashCard extends StatelessWidget {
   final String name;
-  final String lastVisit;
-  final String badgeLabel;
-  final Color badgeBg;
-  final Color badgeColor;
+  final String status;
   final VoidCallback onTap;
 
   const _CarwashCard({
     required this.name,
-    required this.lastVisit,
-    required this.badgeLabel,
-    required this.badgeBg,
-    required this.badgeColor,
+    required this.status,
     required this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
+    final isOpen = status.toLowerCase() == 'open';
+    final badgeBg = isOpen ? Colors.green.shade50 : Colors.grey.shade100;
+    final badgeColor = isOpen ? Colors.green : Colors.grey;
+
     return GestureDetector(
-      onTap: onTap, // ✅ entire card is tappable
+      onTap: onTap,
       child: Container(
         margin: const EdgeInsets.fromLTRB(16, 0, 16, 10),
         padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
@@ -503,7 +416,7 @@ class _CarwashCard extends StatelessWidget {
           border: Border.all(color: AppColors.border),
           boxShadow: [
             BoxShadow(
-              color: Colors.black.withOpacity(0.05),
+              color: Colors.black.withValues(alpha: 0.05),
               blurRadius: 3,
               offset: const Offset(0, 1),
             ),
@@ -538,7 +451,7 @@ class _CarwashCard extends StatelessWidget {
                   ),
                   const SizedBox(height: 2),
                   Text(
-                    lastVisit,
+                    isOpen ? 'Available now' : 'Currently closed',
                     style: const TextStyle(
                         fontSize: 11, color: AppColors.muted),
                   ),
@@ -553,7 +466,7 @@ class _CarwashCard extends StatelessWidget {
                           borderRadius: BorderRadius.circular(10),
                         ),
                         child: Text(
-                          badgeLabel,
+                          status,
                           style: TextStyle(
                             fontFamily: AppTextStyles.fontHeading,
                             fontSize: 10,

@@ -1,5 +1,9 @@
+// lib/shared/widgets/shared_widgets.dart
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import '../../core/theme/app_theme.dart';
+import '../../main.dart';
 
 // ─── APP HEADER ──────────────────────────────────────────────
 class SplashAppBar extends StatelessWidget implements PreferredSizeWidget {
@@ -8,6 +12,17 @@ class SplashAppBar extends StatelessWidget implements PreferredSizeWidget {
 
   @override
   Size get preferredSize => const Size.fromHeight(72);
+
+  String _initials() {
+    final user = Supabase.instance.client.auth.currentUser;
+    final name = user?.userMetadata?['full_name']?.toString() ??
+        user?.email ??
+        '';
+    if (name.isEmpty) return '?';
+    final parts = name.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,50 +39,70 @@ class SplashAppBar extends StatelessWidget implements PreferredSizeWidget {
           ),
           child: Row(
             children: [
-              // Logo icon
-              Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: AppColors.splash,
-                  borderRadius: BorderRadius.circular(8),
-                ),
-                alignment: Alignment.center,
-                child: const Text(
-                  'SS',
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontHeading,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
-              const SizedBox(width: 8),
-              RichText(
-                text: const TextSpan(
-                  style: TextStyle(
-                    fontFamily: AppTextStyles.fontHeading,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: AppColors.dark,
-                  ),
+              // ✅ Logo + wordmark — navigates to home optimally:
+              //    • if on a pushed route → pops back to shell
+              //    • if already in shell → resets bottom nav to tab 0
+              GestureDetector(
+                onTap: () {
+                  final navigator = Navigator.of(context);
+                  if (navigator.canPop()) {
+                    navigator.popUntil((route) => route.isFirst);
+                  } else {
+                    mainShellKey.currentState?.resetToHome();
+                  }
+                },
+                behavior: HitTestBehavior.opaque,
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    TextSpan(text: 'Splash'),
-                    TextSpan(
-                      text: 'Sphere',
-                      style: TextStyle(color: AppColors.splash),
+                    Container(
+                      width: 32,
+                      height: 32,
+                      decoration: BoxDecoration(
+                        color: AppColors.splash,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      alignment: Alignment.center,
+                      child: const Text(
+                        'SS',
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontHeading,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    RichText(
+                      text: const TextSpan(
+                        style: TextStyle(
+                          fontFamily: AppTextStyles.fontHeading,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: AppColors.dark,
+                        ),
+                        children: [
+                          TextSpan(text: 'Splash'),
+                          TextSpan(
+                            text: 'Sphere',
+                            style: TextStyle(color: AppColors.splash),
+                          ),
+                        ],
+                      ),
                     ),
                   ],
                 ),
               ),
+
               const Spacer(),
-              // Avatar
+
+              // ✅ Avatar initials from real user
               Container(
                 width: 34,
                 height: 34,
-                decoration: BoxDecoration(
-                  gradient: const LinearGradient(
+                decoration: const BoxDecoration(
+                  gradient: LinearGradient(
                     colors: [AppColors.splash, AppColors.aqua],
                     begin: Alignment.topLeft,
                     end: Alignment.bottomRight,
@@ -75,9 +110,9 @@ class SplashAppBar extends StatelessWidget implements PreferredSizeWidget {
                   shape: BoxShape.circle,
                 ),
                 alignment: Alignment.center,
-                child: const Text(
-                  'MS',
-                  style: TextStyle(
+                child: Text(
+                  _initials(),
+                  style: const TextStyle(
                     fontFamily: AppTextStyles.fontHeading,
                     fontSize: 13,
                     fontWeight: FontWeight.w700,
@@ -85,6 +120,7 @@ class SplashAppBar extends StatelessWidget implements PreferredSizeWidget {
                   ),
                 ),
               ),
+
               if (actions != null) ...actions!,
             ],
           ),
@@ -191,7 +227,8 @@ class PrimaryButton extends StatelessWidget {
     Widget btn = GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: padding ?? const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding: padding ??
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
           color: AppColors.splash,
           borderRadius: BorderRadius.circular(6),
@@ -212,6 +249,7 @@ class PrimaryButton extends StatelessWidget {
   }
 }
 
+// ─── OUTLINE BUTTON ──────────────────────────────────────────
 class OutlineButton2 extends StatelessWidget {
   final String label;
   final VoidCallback? onTap;
@@ -231,7 +269,8 @@ class OutlineButton2 extends StatelessWidget {
     Widget btn = GestureDetector(
       onTap: onTap,
       child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
+        padding:
+            const EdgeInsets.symmetric(horizontal: 18, vertical: 10),
         decoration: BoxDecoration(
           color: Colors.transparent,
           border: Border.all(color: AppColors.splash, width: 1.5),
@@ -285,7 +324,8 @@ class _PillRowState extends State<PillRow> {
             onTap: () => setState(() => _selected = i),
             child: Container(
               margin: const EdgeInsets.only(right: 6),
-              padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+              padding: const EdgeInsets.symmetric(
+                  horizontal: 14, vertical: 6),
               decoration: BoxDecoration(
                 color: active ? AppColors.splash : Colors.white,
                 border: Border.all(

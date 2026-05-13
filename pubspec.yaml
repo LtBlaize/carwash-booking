@@ -17,6 +17,7 @@ dependencies:
   geolocator: ^11.0.0
   cupertino_icons: ^1.0.2
   provider: ^6.1.2
+  flutter_dotenv: ^5.1.0        # ✅ ADD
 
 dev_dependencies:
   flutter_test:
@@ -27,11 +28,9 @@ dev_dependencies:
 flutter:
   uses-material-design: true
 
-  # ✅ FIX: Declare the two custom fonts used in AppTextStyles.
-  #         Place the font files in assets/fonts/ in your project root,
-  #         then download them from Google Fonts:
-  #           • Plus Jakarta Sans → fonts/PlusJakartaSans-*.ttf
-  #           • DM Sans          → fonts/DMSans-*.ttf
+  assets:
+    - assets/.env               # ✅ ADD — dotenv reads from assets/
+
   fonts:
     - family: PlusJakartaSans
       fonts:

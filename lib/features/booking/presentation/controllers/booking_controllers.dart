@@ -1,4 +1,6 @@
-import 'package:flutter/material.dart';
+// lib/features/booking/presentation/controllers/booking_controllers.dart
+
+import 'package:flutter/foundation.dart';
 import '../../domain/entities/booking_entity.dart';
 import '../../domain/usecases/create_booking_usecase.dart';
 import '../../domain/usecases/get_booking_usecase.dart';
@@ -22,7 +24,8 @@ class BookingController extends ChangeNotifier {
 
   Future<BookingEntity?> createBooking({
     required String carwashId,
-    required String vehicleId,
+    required int vehicleId,
+    required String vehicleSize,
     required DateTime schedule,
     required List<String> serviceIds,
   }) async {
@@ -33,6 +36,7 @@ class BookingController extends ChangeNotifier {
       final booking = await createBookingUsecase(
         carwashId: carwashId,
         vehicleId: vehicleId,
+        vehicleSize: vehicleSize,
         schedule: schedule,
         serviceIds: serviceIds,
       );

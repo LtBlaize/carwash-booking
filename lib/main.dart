@@ -1,15 +1,19 @@
+// lib/main.dart
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
-import 'app/app_router.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'app/app.dart';
 import 'core/theme/app_theme.dart';
 import 'features/home/presentation/pages/home_page.dart';
-import 'features/booking/presentation/pages/book_page.dart';
 import 'features/booking/presentation/pages/history_page.dart';
 import 'features/profile/presentation/pages/profile_page.dart';
 
-final client = Supabase.instance.client;
 final supabase = Supabase.instance.client;
+
+// ✅ Global key so SplashAppBar can call resetToHome() without a push
+final mainShellKey = GlobalKey<_MainShellState>();
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,31 +25,18 @@ void main() async {
     ),
   );
 
+  await dotenv.load(fileName: 'assets/.env');
+
   await Supabase.initialize(
-    url: 'https://syemfjqtcvxfvmwcmkdg.supabase.co',
-    anonKey:
-        'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InN5ZW1manF0Y3Z4ZnZtd2Nta2RnIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzYwMjgzNjIsImV4cCI6MjA5MTYwNDM2Mn0.bq-4guIG132carRocQTcqbaz3z0lL6oDXXsa_1F3KDs',
+    url: dotenv.env['SUPABASE_URL']!,
+    anonKey: dotenv.env['SUPABASE_ANON_KEY']!,
   );
 
   runApp(const MyApp());
 }
 
-class MyApp extends StatelessWidget {
-  const MyApp({super.key});
+// ─── MAIN SHELL ───────────────────────────────────────────────────────────────
 
-  @override
-  Widget build(BuildContext context) {
-    return MaterialApp(
-      debugShowCheckedModeBanner: false,
-      title: 'Carwash App',
-      theme: AppTheme.theme,
-      onGenerateRoute: AppRouter.generateRoute,
-      initialRoute: '/login',
-    );
-  }
-}
-
-// ─── MAIN SHELL (bottom nav wrapper) ─────────────────────────
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -56,9 +47,20 @@ class MainShell extends StatefulWidget {
 class _MainShellState extends State<MainShell> {
   int _currentIndex = 0;
 
+  // ✅ Called by SplashAppBar when already inside the shell
+  void resetToHome() => setState(() => _currentIndex = 0);
+
+  void _onTabTap(int i) {
+    if (i == 1) {
+      Navigator.pushNamed(context, '/map');
+      return;
+    }
+    setState(() => _currentIndex = i);
+  }
+
   final _pages = const [
     HomePage(),
-    BookPage(),
+    SizedBox.shrink(), // placeholder — tab 1 pushes /map
     HistoryPage(),
     ProfilePage(),
   ];
@@ -72,11 +74,13 @@ class _MainShellState extends State<MainShell> {
       ),
       bottomNavigationBar: _BottomNav(
         currentIndex: _currentIndex,
-        onTap: (i) => setState(() => _currentIndex = i),
+        onTap: _onTabTap,
       ),
     );
   }
 }
+
+// ─── BOTTOM NAV ───────────────────────────────────────────────────────────────
 
 class _BottomNav extends StatelessWidget {
   final int currentIndex;
@@ -88,7 +92,7 @@ class _BottomNav extends StatelessWidget {
   Widget build(BuildContext context) {
     final items = [
       {'icon': '🏠', 'label': 'Home'},
-      {'icon': '📅', 'label': 'Book'},
+      {'icon': '🗺️', 'label': 'Map'},
       {'icon': '📋', 'label': 'History'},
       {'icon': '👤', 'label': 'Profile'},
     ];
@@ -119,8 +123,6 @@ class _BottomNav extends StatelessWidget {
                         items[i]['icon']!,
                         style: TextStyle(
                           fontSize: 20,
-                          // ✅ FIX: withOpacity is deprecated in Flutter 3.27+.
-                          //         Use Color.fromRGBO or withValues instead.
                           color: active
                               ? null
                               : Colors.black.withValues(alpha: 0.3),
@@ -135,9 +137,8 @@ class _BottomNav extends StatelessWidget {
                           fontWeight: active
                               ? FontWeight.w700
                               : FontWeight.w600,
-                          color: active
-                              ? AppColors.splash
-                              : AppColors.muted,
+                          color:
+                              active ? AppColors.splash : AppColors.muted,
                         ),
                       ),
                     ],

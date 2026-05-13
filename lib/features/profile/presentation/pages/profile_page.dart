@@ -1,9 +1,12 @@
+// lib/features/profile/presentation/pages/profile_page.dart
+
 import 'package:flutter/material.dart';
-import '../../../../core/theme/app_theme.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
+import '../../../../core/theme/app_theme.dart';
 import '../../../../shared/widgets/shared_widgets.dart';
 
-// ─── Data model ──────────────────────────────────────────────────────────────
+// ─── Data model ───────────────────────────────────────────────────────────────
+
 class VehicleBrand {
   final String brand;
   final List<String> models;
@@ -11,6 +14,7 @@ class VehicleBrand {
 }
 
 // ─── Profile Page ─────────────────────────────────────────────────────────────
+
 class ProfilePage extends StatefulWidget {
   const ProfilePage({super.key});
 
@@ -19,93 +23,167 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
-  final supabase = Supabase.instance.client;
+  final _supabase = Supabase.instance.client;
 
-  Map<String, dynamic>? user;
-  List<Map<String, dynamic>> vehicles = [];
-  List<VehicleBrand> vehicleBrands = [];
-  bool loading = true;
+  Map<String, dynamic>? _profile;
+  List<Map<String, dynamic>> _vehicles = [];
+  List<VehicleBrand> _vehicleBrands = [];
+  bool _loading = true;
+  String? _error;
 
   @override
   void initState() {
     super.initState();
-    loadProfile();
+    _loadProfile();
   }
 
-  Future<void> loadProfile() async {
-    final currentUser = supabase.auth.currentUser;
-
-    final userData = await supabase
-        .from('profiles')
-        .select()
-        .eq('id', currentUser!.id)
-        .single();
-
-    final vehicleData = await supabase
-        .from('vehicles')
-        .select()
-        .eq('user_id', currentUser.id);
-
-    // Fetch brands + models from your vehiclemodels SQL table
-    // Expected schema: vehiclemodels(brand TEXT, model TEXT)
-    final brandData = await supabase
-        .from('vehiclemodels')
-        .select('brand, model')
-        .order('brand');
-
-    // Group models by brand
-    final Map<String, List<String>> brandMap = {};
-    for (final row in brandData as List<dynamic>) {
-      final brand = row['brand'] as String;
-      final model = row['model'] as String;
-      brandMap.putIfAbsent(brand, () => []).add(model);
-    }
-
+  // ✅ FIX 6a: email from auth.currentUser, not profiles table
+  // ✅ FIX 6b: try/catch so page doesn't crash on network error
+  Future<void> _loadProfile() async {
     setState(() {
-      user = userData;
-      vehicles = List<Map<String, dynamic>>.from(vehicleData);
-      vehicleBrands = brandMap.entries
-          .map((e) => VehicleBrand(brand: e.key, models: e.value))
-          .toList();
-      loading = false;
+      _loading = true;
+      _error = null;
     });
+
+    try {
+      final currentUser = _supabase.auth.currentUser;
+      if (currentUser == null) {
+        setState(() {
+          _loading = false;
+          _error = 'Not logged in.';
+        });
+        return;
+      }
+
+      final profileData = await _supabase
+          .from('profiles')
+          .select()
+          .eq('id', currentUser.id)
+          .single();
+
+      final vehicleData = await _supabase
+          .from('vehicles')
+          .select()
+          .eq('user_id', currentUser.id);
+
+      final brandData = await _supabase
+          .from('vehiclemodels')
+          .select('brand, model')
+          .order('brand');
+
+      final Map<String, List<String>> brandMap = {};
+      for (final row in brandData as List<dynamic>) {
+        final brand = row['brand'] as String;
+        final model = row['model'] as String;
+        brandMap.putIfAbsent(brand, () => []).add(model);
+      }
+
+      if (!mounted) return;
+      setState(() {
+        _profile = {
+          ...profileData,
+          // ✅ FIX 6a: inject email from auth — profiles table has no email column
+          'email': currentUser.email ?? '',
+        };
+        _vehicles = List<Map<String, dynamic>>.from(vehicleData);
+        _vehicleBrands = brandMap.entries
+            .map((e) => VehicleBrand(brand: e.key, models: e.value))
+            .toList();
+        _loading = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+      setState(() {
+        _loading = false;
+        _error = 'Failed to load profile. Please try again.';
+      });
+    }
   }
 
-  Future<void> addVehicle(Map<String, dynamic> vehicleData) async {
-  final currentUser = supabase.auth.currentUser;
+  // ✅ FIX 6c: initials derived from actual full_name
+  String _initials(String? fullName) {
+    if (fullName == null || fullName.trim().isEmpty) return '?';
+    final parts = fullName.trim().split(RegExp(r'\s+'));
+    if (parts.length == 1) return parts[0][0].toUpperCase();
+    return (parts[0][0] + parts[1][0]).toUpperCase();
+  }
 
-  // 🔥 GET SIZE FROM vehiclemodels TABLE
-  final modelData = await supabase
-      .from('vehiclemodels')
-      .select('size_id')
-      .eq('brand', vehicleData['brand'])
-      .eq('model', vehicleData['model'])
-      .single();
+  Future<void> _addVehicle(Map<String, dynamic> vehicleData) async {
+    final currentUser = _supabase.auth.currentUser;
+    if (currentUser == null) return;
 
-  final sizeId = modelData['size_id'];
+    try {
+      final modelData = await _supabase
+          .from('vehiclemodels')
+          .select('size_id')
+          .eq('brand', vehicleData['brand'])
+          .eq('model', vehicleData['model'])
+          .single();
 
-  // 🔥 INSERT WITH SIZE
-  await supabase.from('vehicles').insert({
-    ...vehicleData,
-    'size_id': sizeId, // ✅ AUTO FILLED
-    'user_id': currentUser!.id,
-  });
+      await _supabase.from('vehicles').insert({
+        ...vehicleData,
+        'size_id': modelData['size_id'],
+        'user_id': currentUser.id,
+      });
 
-  loadProfile();
-}
+      _loadProfile();
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to add vehicle: $e'),
+          backgroundColor: Colors.red.shade700,
+          behavior: SnackBarBehavior.floating,
+        ),
+      );
+    }
+  }
+
+  // ✅ FIX 7: Sign Out actually signs out and navigates to /login
+  Future<void> _signOut() async {
+    await _supabase.auth.signOut();
+    if (!mounted) return;
+    Navigator.pushNamedAndRemoveUntil(context, '/login', (_) => false);
+  }
 
   @override
   Widget build(BuildContext context) {
-    if (loading) {
-      return const Center(child: CircularProgressIndicator());
+    if (_loading) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
     }
+
+    // ✅ FIX 6b: show error state instead of crashing
+    if (_error != null) {
+      return Scaffold(
+        backgroundColor: AppColors.bg,
+        appBar: const SplashAppBar(),
+        body: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(_error!,
+                  style: const TextStyle(
+                      color: AppColors.muted, fontSize: 13)),
+              const SizedBox(height: 12),
+              OutlineButton2('Retry', onTap: _loadProfile),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final fullName = _profile?['full_name']?.toString() ?? '';
+    final email = _profile?['email']?.toString() ?? '';
+    final phone = _profile?['phone']?.toString() ?? '';
 
     return Scaffold(
       backgroundColor: AppColors.bg,
       appBar: const SplashAppBar(),
       body: ListView(
         children: [
-          // ── Profile header ─────────────────────────────────────────────
+          // ── Profile header ──────────────────────────────────────────────
           Container(
             color: Colors.white,
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 16),
@@ -123,9 +201,10 @@ class _ProfilePageState extends State<ProfilePage> {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: const Text(
-                    'MS',
-                    style: TextStyle(
+                  // ✅ FIX 6c: real initials from name
+                  child: Text(
+                    _initials(fullName),
+                    style: const TextStyle(
                       fontFamily: AppTextStyles.fontHeading,
                       fontSize: 26,
                       fontWeight: FontWeight.w800,
@@ -135,7 +214,7 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  user?['full_name'] ?? 'Loading...',
+                  fullName.isNotEmpty ? fullName : 'No name set',
                   style: const TextStyle(
                     fontFamily: AppTextStyles.fontHeading,
                     fontSize: 18,
@@ -145,22 +224,27 @@ class _ProfilePageState extends State<ProfilePage> {
                 ),
                 const SizedBox(height: 2),
                 Text(
-                  '${user?['phone']} · ${user?['email']}',
-                  style: const TextStyle(fontSize: 13, color: AppColors.muted),
+                  [phone, email]
+                      .where((s) => s.isNotEmpty)
+                      .join(' · '),
+                  style: const TextStyle(
+                      fontSize: 13, color: AppColors.muted),
                 ),
               ],
             ),
           ),
           const Divider(height: 1, color: AppColors.border),
 
-          // ── My Vehicles ────────────────────────────────────────────────
+          // ── My Vehicles ─────────────────────────────────────────────────
           const SectionTitle('My Vehicles'),
 
-          ...vehicles.map((v) => _VehicleCard(
-                emoji: '🚗',
+          ..._vehicles.map((v) => _VehicleCard(
+                emoji: _vehicleEmoji(v),
                 name: '${v['brand']} ${v['model']}',
-                info: '${v['color']}',
-                plate: v['plate_number'],
+                info: [v['color'], v['type']]
+                    .where((s) => s != null && s.toString().isNotEmpty)
+                    .join(' · '),
+                plate: v['plate_number'] ?? '',
               )),
 
           Padding(
@@ -173,15 +257,15 @@ class _ProfilePageState extends State<ProfilePage> {
                 showDialog(
                   context: context,
                   builder: (_) => AddVehicleDialog(
-                    onAdd: addVehicle,
-                    vehicleBrands: vehicleBrands,
+                    onAdd: _addVehicle,
+                    vehicleBrands: _vehicleBrands,
                   ),
                 );
               },
             ),
           ),
 
-          // ── Settings ───────────────────────────────────────────────────
+          // ── Settings ────────────────────────────────────────────────────
           const SectionTitle('Settings'),
 
           Container(
@@ -197,7 +281,7 @@ class _ProfilePageState extends State<ProfilePage> {
                   emoji: '👤',
                   iconBg: AppColors.splashLight,
                   title: 'Edit Profile',
-                  subtitle: 'Name, email, phone number',
+                  subtitle: 'Name, phone number',
                 ),
                 _MenuItem(
                   emoji: '🔔',
@@ -217,12 +301,15 @@ class _ProfilePageState extends State<ProfilePage> {
                   title: 'Privacy & Security',
                   subtitle: 'Data, sessions',
                 ),
+                // ✅ FIX 7: Sign Out now calls _signOut, subtitle is no longer
+                //           a placeholder phone number
                 _MenuItem(
                   emoji: '🚪',
                   iconBg: const Color(0xFFFEE2E2),
                   title: 'Sign Out',
-                  subtitle: '0917-123-4567',
+                  subtitle: 'Signed in as $email',
                   isLast: true,
+                  onTap: _signOut,
                 ),
               ],
             ),
@@ -232,9 +319,19 @@ class _ProfilePageState extends State<ProfilePage> {
       ),
     );
   }
+
+  String _vehicleEmoji(Map<String, dynamic> v) {
+    final type = v['type']?.toString().toLowerCase() ?? '';
+    if (type.contains('suv') || type.contains('mpv')) return '🚙';
+    if (type.contains('truck')) return '🛻';
+    if (type.contains('van')) return '🚐';
+    if (type.contains('motor') || type.contains('bike')) return '🏍️';
+    return '🚗';
+  }
 }
 
 // ─── Add Vehicle Dialog ───────────────────────────────────────────────────────
+
 class AddVehicleDialog extends StatefulWidget {
   final Function(Map<String, dynamic>) onAdd;
   final List<VehicleBrand> vehicleBrands;
@@ -254,10 +351,14 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
 
   String? _selectedBrand;
   String? _selectedModel;
+  // ✅ FIX 10: vehicle type field restored
+  String? _selectedType;
   List<String> _availableModels = [];
 
   final _colorController = TextEditingController();
   final _plateController = TextEditingController();
+
+  static const _vehicleTypes = ['Sedan', 'SUV', 'MPV', 'Hatchback', 'Van', 'Truck', 'Motorcycle'];
 
   @override
   void dispose() {
@@ -294,7 +395,8 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
       ),
       focusedBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
+        borderSide:
+            const BorderSide(color: Color(0xFF3B82F6), width: 1.5),
       ),
       errorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
@@ -302,9 +404,11 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
       ),
       focusedErrorBorder: OutlineInputBorder(
         borderRadius: BorderRadius.circular(12),
-        borderSide: const BorderSide(color: Color(0xFFEF4444), width: 1.5),
+        borderSide:
+            const BorderSide(color: Color(0xFFEF4444), width: 1.5),
       ),
-      labelStyle: const TextStyle(color: Color(0xFF64748B), fontSize: 14),
+      labelStyle:
+          const TextStyle(color: Color(0xFF64748B), fontSize: 14),
       contentPadding:
           const EdgeInsets.symmetric(horizontal: 16, vertical: 14),
     );
@@ -320,10 +424,11 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
     String? Function(T?)? validator,
   }) {
     return DropdownButtonFormField<T>(
-      initialValue: value,
+      value: value,
       decoration: _fieldDecoration(label, icon).copyWith(
-        fillColor:
-            enabled ? const Color(0xFFF5F7FA) : const Color(0xFFEDF0F5),
+        fillColor: enabled
+            ? const Color(0xFFF5F7FA)
+            : const Color(0xFFEDF0F5),
       ),
       style: const TextStyle(
         color: Color(0xFF1E293B),
@@ -332,10 +437,12 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
       ),
       dropdownColor: Colors.white,
       borderRadius: BorderRadius.circular(12),
-      icon: const Icon(Icons.expand_more_rounded, color: Color(0xFF94A3B8)),
+      icon: const Icon(Icons.expand_more_rounded,
+          color: Color(0xFF94A3B8)),
       hint: Text(
         enabled ? 'Select $label' : 'Select brand first',
-        style: const TextStyle(color: Color(0xFFCBD5E1), fontSize: 14),
+        style:
+            const TextStyle(color: Color(0xFFCBD5E1), fontSize: 14),
       ),
       items: items
           .map((item) => DropdownMenuItem<T>(
@@ -351,7 +458,8 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
   @override
   Widget build(BuildContext context) {
     return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      shape:
+          RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
       backgroundColor: Colors.white,
       child: Container(
         width: 400,
@@ -359,7 +467,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            // ── Header ────────────────────────────────────────────────────
+            // Header
             Container(
               padding: const EdgeInsets.fromLTRB(24, 20, 16, 20),
               decoration: const BoxDecoration(
@@ -376,7 +484,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                   Container(
                     padding: const EdgeInsets.all(8),
                     decoration: BoxDecoration(
-                      color: Colors.white.withOpacity(0.2),
+                      color: Colors.white.withValues(alpha: 0.2),
                       borderRadius: BorderRadius.circular(10),
                     ),
                     child: const Icon(Icons.directions_car_rounded,
@@ -398,7 +506,8 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                     icon: const Icon(Icons.close_rounded,
                         color: Colors.white, size: 20),
                     style: IconButton.styleFrom(
-                      backgroundColor: Colors.white.withOpacity(0.15),
+                      backgroundColor:
+                          Colors.white.withValues(alpha: 0.15),
                       padding: const EdgeInsets.all(6),
                       minimumSize: const Size(32, 32),
                     ),
@@ -407,7 +516,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
               ),
             ),
 
-            // ── Form ──────────────────────────────────────────────────────
+            // Form
             Flexible(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.fromLTRB(24, 20, 24, 0),
@@ -441,7 +550,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                       ),
                       const SizedBox(height: 12),
 
-                      // Model (filtered by brand)
+                      // Model
                       _buildDropdown<String>(
                         label: 'Model',
                         icon: Icons.directions_car_outlined,
@@ -466,7 +575,19 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                       ),
                       const SizedBox(height: 10),
 
-                      
+                      // ✅ FIX 10: Vehicle type dropdown restored
+                      // Was: const SizedBox(height: 12) — a placeholder with no field
+                      // Now inserts 'type' into vehicles table which has a type column
+                      _buildDropdown<String>(
+                        label: 'Type',
+                        icon: Icons.category_outlined,
+                        value: _selectedType,
+                        items: _vehicleTypes,
+                        onChanged: (v) =>
+                            setState(() => _selectedType = v),
+                        validator: (v) =>
+                            v == null ? 'Please select a type' : null,
+                      ),
                       const SizedBox(height: 12),
 
                       // Color
@@ -499,7 +620,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
               ),
             ),
 
-            // ── Actions ───────────────────────────────────────────────────
+            // Actions
             Padding(
               padding: const EdgeInsets.fromLTRB(24, 0, 24, 20),
               child: Row(
@@ -513,12 +634,13 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        side: const BorderSide(color: Color(0xFFE2E8F0)),
+                        side: const BorderSide(
+                            color: Color(0xFFE2E8F0)),
                         foregroundColor: const Color(0xFF64748B),
                       ),
                       child: const Text('Cancel',
-                          style:
-                              TextStyle(fontWeight: FontWeight.w600)),
+                          style: TextStyle(
+                              fontWeight: FontWeight.w600)),
                     ),
                   ),
                   const SizedBox(width: 12),
@@ -530,6 +652,8 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
                           widget.onAdd({
                             'brand': _selectedBrand!,
                             'model': _selectedModel!,
+                            // ✅ FIX 10: type now included in insert payload
+                            'type': _selectedType!,
                             'color': _colorController.text,
                             'plate_number': _plateController.text,
                           });
@@ -567,6 +691,7 @@ class _AddVehicleDialogState extends State<AddVehicleDialog> {
 }
 
 // ─── Vehicle Card ─────────────────────────────────────────────────────────────
+
 class _VehicleCard extends StatelessWidget {
   final String emoji;
   final String name;
@@ -591,7 +716,7 @@ class _VehicleCard extends StatelessWidget {
         border: Border.all(color: AppColors.border),
         boxShadow: [
           BoxShadow(
-            color: Colors.black.withOpacity(0.04),
+            color: Colors.black.withValues(alpha: 0.04),
             blurRadius: 3,
             offset: const Offset(0, 1),
           ),
@@ -623,8 +748,8 @@ class _VehicleCard extends StatelessWidget {
             ),
           ),
           Container(
-            padding:
-                const EdgeInsets.symmetric(horizontal: 10, vertical: 4),
+            padding: const EdgeInsets.symmetric(
+                horizontal: 10, vertical: 4),
             decoration: BoxDecoration(
               color: AppColors.splash50,
               borderRadius: BorderRadius.circular(6),
@@ -646,12 +771,15 @@ class _VehicleCard extends StatelessWidget {
 }
 
 // ─── Menu Item ────────────────────────────────────────────────────────────────
+
 class _MenuItem extends StatelessWidget {
   final String emoji;
   final Color iconBg;
   final String title;
   final String subtitle;
   final bool isLast;
+  // ✅ FIX 7: onTap is now a real parameter, not hardcoded () {}
+  final VoidCallback? onTap;
 
   const _MenuItem({
     required this.emoji,
@@ -659,15 +787,16 @@ class _MenuItem extends StatelessWidget {
     required this.title,
     required this.subtitle,
     this.isLast = false,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     return GestureDetector(
-      onTap: () {},
+      onTap: onTap,
       child: Container(
-        padding:
-            const EdgeInsets.symmetric(horizontal: 20, vertical: 14),
+        padding: const EdgeInsets.symmetric(
+            horizontal: 20, vertical: 14),
         decoration: BoxDecoration(
           color: Colors.white,
           border: isLast
@@ -686,7 +815,8 @@ class _MenuItem extends StatelessWidget {
                 borderRadius: BorderRadius.circular(8),
               ),
               alignment: Alignment.center,
-              child: Text(emoji, style: const TextStyle(fontSize: 16)),
+              child: Text(emoji,
+                  style: const TextStyle(fontSize: 16)),
             ),
             const SizedBox(width: 12),
             Expanded(
